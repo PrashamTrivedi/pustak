@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "pustak",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  "observability": {
+    "enabled": true
+  },
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "pustak-pages"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "pustak.prashamhtrivedi.app",
+      "custom_domain": true
+    }
+  ]
+}
