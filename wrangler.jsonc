@@ -3,6 +3,7 @@
   "name": "pustak",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
   },
@@ -12,6 +13,43 @@
       "bucket_name": "pustak-pages"
     }
   ],
+  // KV namespaces. Create them once and paste the ids:
+  //   npx wrangler kv namespace create OAUTH_KV
+  //   npx wrangler kv namespace create AUTH_KV
+  "kv_namespaces": [
+    {
+      // Required by @cloudflare/workers-oauth-provider: stores OAuth
+      // grants, tokens (hashed) and dynamically-registered clients.
+      "binding": "OAUTH_KV",
+      "id": "REPLACE_WITH_OAUTH_KV_ID"
+    },
+    {
+      // Pustak's own auth store: pending OTP codes and user accounts.
+      "binding": "AUTH_KV",
+      "id": "REPLACE_WITH_AUTH_KV_ID"
+    }
+  ],
+  // The MCP server runs as a per-session Durable Object (McpAgent).
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PustakMCP",
+        "class_name": "PustakMCP"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["PustakMCP"]
+    }
+  ],
+  "vars": {
+    // The owner all pre-existing pages belong to.
+    "OWNER_EMAIL": "me@prashamhtrivedi.in",
+    // From-address for OTP emails. The domain must be verified in Resend.
+    "OTP_FROM_EMAIL": "Pustak <login@pustak.prashamhtrivedi.app>"
+  },
   "routes": [
     {
       "pattern": "pustak.prashamhtrivedi.app",

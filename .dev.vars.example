@@ -1,3 +1,9 @@
-# Copy to .dev.vars for local dev. Set the same value in prod with:
+# Copy to .dev.vars for local dev.
+# Optional: the legacy Bearer token for the REST write/list API.
 #   wrangler secret put API_TOKEN
 API_TOKEN=change-me-local-dev-token
+
+# Optional: Resend API key for OTP email delivery. If unset, OTP codes are
+# logged to the console (and stored in local KV) so you can still sign in.
+#   wrangler secret put RESEND_API_KEY
+# RESEND_API_KEY=re_xxxxxxxx
