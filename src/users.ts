@@ -51,7 +51,10 @@ export async function setUsername(env: Bindings, userId: string, slug: string): 
   if (isReservedSlug(s)) return 'reserved'
   if (await isSlugTaken(env, s)) return 'taken'
   try {
-    await env.DB.prepare('UPDATE user SET username = ? WHERE id = ?').bind(s, userId).run()
+    // `username IS NULL` makes the slug claim one-shot: a user who already has a
+    // slug (or a concurrent double-submit) yields 0 changes rather than a rename.
+    const r = await env.DB.prepare('UPDATE user SET username = ? WHERE id = ? AND username IS NULL').bind(s, userId).run()
+    if (r.meta?.changes === 0) return 'taken'
   } catch {
     // Unique-index race: someone claimed it between the check and the write.
     return 'taken'

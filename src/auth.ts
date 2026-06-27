@@ -174,14 +174,19 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Bindings }>) {
     const user = await getSessionUser(c.env, c.req.raw)
     if (!user) return c.redirect('/_login')
     const form = await c.req.formData()
-    const slug = String(form.get('username') ?? '')
     const oauthRaw = form.get('oauth') ? String(form.get('oauth')) : undefined
 
-    const res = await setUsername(c.env, user.id, slug)
-    if (res !== 'ok') {
-      return c.html(loginPage({ step: 'username', action: '/_choose-username', slug, hidden: oauthRaw ? { oauth: oauthRaw } : undefined, error: slugErrors[res], subtitle: `Welcome, ${user.email}` }), res === 'taken' ? 409 : 400)
+    // The slug is immutable once claimed — never overwrite an existing one (that
+    // would orphan the user's pages and free the slug for another user to take).
+    let username = await getUsername(c.env, user.id)
+    if (!username) {
+      const slug = String(form.get('username') ?? '')
+      const res = await setUsername(c.env, user.id, slug)
+      if (res !== 'ok') {
+        return c.html(loginPage({ step: 'username', action: '/_choose-username', slug, hidden: oauthRaw ? { oauth: oauthRaw } : undefined, error: slugErrors[res], subtitle: `Welcome, ${user.email}` }), res === 'taken' ? 409 : 400)
+      }
+      username = slug.trim().toLowerCase()
     }
-    const username = slug.trim().toLowerCase()
 
     if (oauthRaw) {
       const oauthReq = decodeOAuth(oauthRaw)
@@ -191,7 +196,7 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Bindings }>) {
     return c.redirect('/')
   })
 
-  // Sign out: clear the session, back to login.
-  app.get('/logout', async (c) => redirectWithCookies('/_login', await signOutCookies(c.env, c.req.raw)))
+  // Sign out: clear the session, back to login. POST-only so it can't be
+  // triggered cross-site by a top-level GET navigation (forced-logout CSRF).
   app.post('/logout', async (c) => redirectWithCookies('/_login', await signOutCookies(c.env, c.req.raw)))
 }

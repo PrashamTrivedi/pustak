@@ -31,6 +31,14 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
     return toKey(this.username + '/' + rel)
   }
 
+  /** Invariant: every valid token carries a slug. Guard tools against a blank one. */
+  private get hasSlug(): boolean {
+    return /^[a-z0-9-]+$/.test(this.username)
+  }
+  private noSlug() {
+    return { isError: true, content: [{ type: 'text' as const, text: 'No username on this account — sign in again.' }] }
+  }
+
   async init() {
     const { server } = this
 
@@ -49,6 +57,7 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
         inputSchema: { prefix: z.string().optional().describe('Only paths starting with this (within your space).') },
       },
       async ({ prefix }) => {
+        if (!this.hasSlug) return this.noSlug()
         const base = this.username + '/'
         const full = base + (prefix ? String(prefix).replace(/^\/+/, '') : '')
         const pages: { path: string; size: number; uploaded: string }[] = []
@@ -72,6 +81,7 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
         inputSchema: { path: z.string().describe('Slug-relative path, e.g. "explainers/intro".') },
       },
       async ({ path }) => {
+        if (!this.hasSlug) return this.noSlug()
         const key = this.key(path)
         const obj = await this.env.BUCKET.get(key)
         if (!obj) return { isError: true, content: [{ type: 'text', text: `Not found: /${key}` }] }
@@ -109,6 +119,7 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
         inputSchema: { path: z.string().describe('Slug-relative path, e.g. "explainers/intro".') },
       },
       async ({ path }) => {
+        if (!this.hasSlug) return this.noSlug()
         const key = this.key(path)
         const existing = await this.env.BUCKET.head(key)
         if (!existing) return { isError: true, content: [{ type: 'text', text: `Not found: /${key}` }] }

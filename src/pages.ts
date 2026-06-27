@@ -21,7 +21,13 @@ const LEGACY_REDIRECTS: Array<[from: string, to: string]> = [
 
 /** Map a request path to an R2 object key (strip leading "/", index.html for dirs). */
 export function toKey(path: string): string {
-  let key = decodeURIComponent(path).replace(/^\/+/, '')
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(path)
+  } catch {
+    decoded = path // malformed %-encoding: fall back to the raw path, don't 500
+  }
+  let key = decoded.replace(/^\/+/, '')
   if (key === '' || key.endsWith('/')) key += 'index.html'
   return key
 }

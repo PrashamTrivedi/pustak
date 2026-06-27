@@ -263,7 +263,7 @@ export function dashboardHtml(username: string, email: string): string {
       <p class="card-label" lang="hi">प्रवेश<small>Signed in</small></p>
       <div class="bar">
         <span class="field" style="gap:.5rem"><span class="tilak">۰</span><strong>@${esc(username)}</strong><span class="micro" style="margin:0">${esc(email)}</span></span>
-        <a href="/logout" id="logout" class="logout-btn">बाहर · Sign out</a>
+        <form method="POST" action="/logout" style="margin:0"><button type="submit" class="logout-btn">बाहर · Sign out</button></form>
         <span id="status"></span>
       </div>
     </section>
