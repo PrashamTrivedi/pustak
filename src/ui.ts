@@ -150,6 +150,19 @@ export function dashboardHtml(username: string, email: string): string {
     .scribe-or span { display: flex; gap: .4rem; align-items: baseline; }
   }
 
+  /* yantra — the MCP connect desk */
+  .mcp-field, .mcp-client { display: grid; gap: .35rem; }
+  .mcp-clients { display: grid; gap: 1rem; margin-top: 1.1rem; }
+  .mcp .hint { margin: 0 0 1rem; }
+  .mcp .hint strong { color: var(--sindoor); font-weight: 600; }
+  .codeline, .codeblock { display: flex; gap: .5rem; background: var(--paper); border: 1.5px solid var(--rule); border-radius: 4px; padding: .55rem .7rem; box-shadow: inset 2.5px 0 0 #b2301855; }
+  .codeline { align-items: center; }
+  .codeblock { align-items: flex-start; }
+  .codeline code, .codeblock code { background: transparent; color: var(--ink); font-weight: 500; font-size: .82rem; line-height: 1.55; flex: 1; min-width: 0; padding: 0; border-radius: 0; }
+  .codeline code { font-weight: 600; white-space: pre-wrap; word-break: break-all; }
+  .codeblock code { white-space: pre; overflow-x: auto; }
+  .codeline .mini.copy, .codeblock .mini.copy { opacity: 1; flex: none; align-self: flex-start; }
+
   /* the index */
   .index-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 2.4rem 0 .6rem; flex-wrap: wrap; }
   .index-head h2 { font-family: var(--display); font-weight: 400; font-size: clamp(1.9rem, 5vw, 2.8rem); margin: 0; color: var(--ink); }
@@ -298,6 +311,32 @@ export function dashboardHtml(username: string, email: string): string {
         </div>
       </details>
     </section>
+
+    <section class="card mcp">
+      <details>
+        <summary><span class="om">⌁</span> <span class="card-label" lang="hi" style="margin:0">यंत्र-द्वार<small>Connect via MCP · drive Pustak from your AI client</small></span></summary>
+        <div class="up">
+          <p class="hint">Pustak speaks the <strong>Model Context Protocol</strong> over a streamable-HTTP endpoint. Add it to any MCP client — Claude Code, Claude Desktop, Cursor — to <em>list, read, write &amp; delete</em> your pages and use the <code>explainer</code> prompt. On first connect you'll be sent here to authorize as <strong>@${esc(username)}</strong>.</p>
+
+          <div class="mcp-field">
+            <span class="l">द्वार · Endpoint</span>
+            <div class="codeline"><code id="mcp-url" class="urlcode"></code><button class="mini copy" type="button" data-copy-target="mcp-url" title="copy endpoint" aria-label="copy endpoint">⎘</button></div>
+          </div>
+
+          <div class="mcp-clients">
+            <div class="mcp-client">
+              <span class="l">Claude Code · CLI</span>
+              <div class="codeblock"><code id="mcp-cli"></code><button class="mini copy" type="button" data-copy-target="mcp-cli" title="copy command" aria-label="copy command">⎘</button></div>
+            </div>
+            <div class="mcp-client">
+              <span class="l">Claude Desktop · Cursor · config</span>
+              <div class="codeblock"><code id="mcp-json"></code><button class="mini copy" type="button" data-copy-target="mcp-json" title="copy config" aria-label="copy config">⎘</button></div>
+            </div>
+          </div>
+          <span class="micro">Tools · <em>whoami</em> · <em>list_pages</em> · <em>read_page</em> · <em>write_page</em> · <em>delete_page</em> &nbsp;॥&nbsp; Prompt · <em>explainer</em></span>
+        </div>
+      </details>
+    </section>
   </div>
 
   <div class="index-head" id="index-head" hidden>
@@ -434,18 +473,30 @@ function toast(html) {
   const t = $('#toast'); t.innerHTML = html; t.classList.add('show');
   clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2400);
 }
-function copyLink(href) {
-  const url = location.origin + href;
-  const done = () => toast('link copied · <b>' + esc(url) + '</b>');
+function copyText(text, label) {
+  const note = label || ('<b>' + esc(text.length > 52 ? text.slice(0, 52) + '…' : text) + '</b>');
+  const done = () => toast(note + ' copied');
   const fallback = () => {
-    const ta = document.createElement('textarea'); ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); done(); } catch (e) { toast('copy failed — ' + esc(url)); }
+    try { document.execCommand('copy'); done(); } catch (e) { toast('copy failed'); }
     document.body.removeChild(ta);
   };
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, fallback);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
   else fallback();
 }
+function copyLink(href) { copyText(location.origin + href, 'link'); }
+
+// MCP connect card: fill the endpoint, CLI command and client config for this host.
+(function setupMcp() {
+  const url = location.origin + '/mcp';
+  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  set('mcp-url', url);
+  set('mcp-cli', 'claude mcp add --transport http pustak ' + url);
+  set('mcp-json', JSON.stringify({ mcpServers: { pustak: { type: 'http', url } } }, null, 2));
+  document.querySelectorAll('[data-copy-target]').forEach((b) =>
+    b.addEventListener('click', () => copyText(document.getElementById(b.dataset.copyTarget).textContent)));
+})();
 
 async function del(key) {
   if (!confirm('Delete "' + key + '" from the book?')) return;

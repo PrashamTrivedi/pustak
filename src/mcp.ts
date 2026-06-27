@@ -3,7 +3,7 @@
 // the OAuth flow in auth.ts). It offers:
 //   • tools     — whoami, list_pages, read_page, write_page, delete_page
 //   • resources — pustak://about, pustak://pages, pustak://page/{path}
-//   • prompt    — explainer (placeholder; see src/explainer.ts)
+//   • prompt    — explainer (body in src/explainer.ts)
 import { McpAgent } from 'agents/mcp'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
@@ -178,15 +178,16 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
     )
 
     // --- Prompt --------------------------------------------------------------
-    // "explainer" — placeholder content (see src/explainer.ts to fill it in).
+    // "explainer" — turns a concept/article/book into a standalone interactive
+    // HTML explainer (body lives in src/explainer.ts).
     server.registerPrompt(
       'explainer',
-      { title: 'Explainer', description: 'Explainer prompt (content to be filled in).' },
+      { title: 'Explainer', description: 'Turn a concept, article, or book into a standalone, interactive HTML explainer page.' },
       () => ({
         messages: [
           {
             role: 'user' as const,
-            content: { type: 'text' as const, text: EXPLAINER_PROMPT_TEXT || '(The explainer prompt has not been filled in yet.)' },
+            content: { type: 'text' as const, text: EXPLAINER_PROMPT_TEXT },
           },
         ],
       }),
