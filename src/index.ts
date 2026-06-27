@@ -4,9 +4,17 @@
 //   • @cloudflare/workers-oauth-provider is the default export: it implements
 //     /token, /register and the .well-known discovery documents, validates
 //     bearer tokens on /mcp, and round-trips the signed-in identity as props.
-//   • /authorize and the email+OTP login UI live in auth.ts (the defaultHandler).
+//   • Better Auth (src/betterAuth.ts) is the identity layer on D1 (accounts +
+//     email-OTP). The login UI in auth.ts calls it server-side (auth.api.*) and
+//     bridges the resulting identity into the OAuth grant.
+//   • /authorize and the login UI live in auth.ts (the defaultHandler).
 //   • The page store + REST API live in pages.ts (also the defaultHandler).
 //   • /mcp is the OAuth-protected MCP server (PustakMCP, a Durable Object).
+//
+// Note: Better Auth's own HTTP surface (/api/auth/*) is intentionally NOT mounted
+// publicly. The bridge uses auth.api.* directly, so exposing the raw endpoints
+// would only add an un-throttled OTP-send path and unused session issuance. Mount
+// it (with a rate-limit store) if you later need Better Auth's HTTP clients.
 import OAuthProvider from '@cloudflare/workers-oauth-provider'
 import { Hono } from 'hono'
 import { registerAuthRoutes } from './auth'

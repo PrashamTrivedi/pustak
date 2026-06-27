@@ -13,20 +13,24 @@
       "bucket_name": "pustak-pages"
     }
   ],
-  // KV namespaces. Create them once and paste the ids:
+  // KV namespace for @cloudflare/workers-oauth-provider: stores OAuth grants,
+  // tokens (hashed) and dynamically-registered clients.
   //   npx wrangler kv namespace create OAUTH_KV
-  //   npx wrangler kv namespace create AUTH_KV
   "kv_namespaces": [
     {
-      // Required by @cloudflare/workers-oauth-provider: stores OAuth
-      // grants, tokens (hashed) and dynamically-registered clients.
       "binding": "OAUTH_KV",
       "id": "REPLACE_WITH_OAUTH_KV_ID"
-    },
+    }
+  ],
+  // D1 database backing Better Auth (user / session / account / verification).
+  //   npx wrangler d1 create pustak-auth   # then paste the id below
+  //   npx wrangler d1 migrations apply pustak-auth --local|--remote
+  "d1_databases": [
     {
-      // Pustak's own auth store: pending OTP codes and user accounts.
-      "binding": "AUTH_KV",
-      "id": "REPLACE_WITH_AUTH_KV_ID"
+      "binding": "DB",
+      "database_name": "pustak-auth",
+      "database_id": "REPLACE_WITH_D1_ID",
+      "migrations_dir": "migrations"
     }
   ],
   // The MCP server runs as a per-session Durable Object (McpAgent).
@@ -44,11 +48,38 @@
       "new_sqlite_classes": ["PustakMCP"]
     }
   ],
+  // OTP email is delivered by our own cfEmailSender Worker (mail.prashamhtrivedi.app)
+  // over a worker-to-worker service binding — no third-party email provider.
+  "services": [
+    {
+      "binding": "EMAIL_SENDER",
+      "service": "cf-email-sender"
+    }
+  ],
+  // Rate limiters guarding OTP issuance (/login/start) against email-bomb /
+  // cost abuse. Enforced on Cloudflare's network (not in local dev).
+  "ratelimits": [
+    {
+      // Per client IP: cap bursts of OTP requests from one source.
+      "name": "LOGIN_RATELIMIT_IP",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      // Per email address: at most a few codes per minute to any one inbox.
+      "name": "LOGIN_RATELIMIT_EMAIL",
+      "namespace_id": "1002",
+      "simple": { "limit": 3, "period": 60 }
+    }
+  ],
   "vars": {
     // The owner all pre-existing pages belong to.
     "OWNER_EMAIL": "me@prashamhtrivedi.in",
-    // From-address for OTP emails. The domain must be verified in Resend.
-    "OTP_FROM_EMAIL": "Pustak <login@pustak.prashamhtrivedi.app>"
+    // From-address for OTP emails. cfEmailSender requires a bare address on the
+    // ALLOWED_FROM_DOMAIN (prashamhtrivedi.app) — no display name.
+    "OTP_FROM_EMAIL": "pustak@prashamhtrivedi.app",
+    // Better Auth canonical origin (no /api/auth suffix). Set per-env if needed.
+    "BETTER_AUTH_URL": "https://pustak.prashamhtrivedi.app"
   },
   "routes": [
     {

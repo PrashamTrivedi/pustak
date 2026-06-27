@@ -1,9 +1,20 @@
 # Copy to .dev.vars for local dev.
+
+# Required: Better Auth signing secret (any long random string).
+#   openssl rand -base64 32 | wrangler secret put BETTER_AUTH_SECRET
+BETTER_AUTH_SECRET=change-me-openssl-rand-base64-32
+
 # Optional: the legacy Bearer token for the REST write/list API.
 #   wrangler secret put API_TOKEN
 API_TOKEN=change-me-local-dev-token
 
-# Optional: Resend API key for OTP email delivery. If unset, OTP codes are
-# logged to the console (and stored in local KV) so you can still sign in.
-#   wrangler secret put RESEND_API_KEY
-# RESEND_API_KEY=re_xxxxxxxx
+# Local-dev only: with EMAIL_API_KEY unset, OTP_DEV_ECHO=1 logs the OTP to the
+# console (and it's also in the local D1 verification table) so you can sign in
+# without the email worker. NEVER set this in production — without it, missing
+# EMAIL_API_KEY fails closed instead of leaking codes to logs.
+OTP_DEV_ECHO=1
+
+# cfEmailSender API key (x-api-key) for OTP email delivery via the EMAIL_SENDER
+# service binding. Required in production (unless OTP_DEV_ECHO is set).
+#   wrangler secret put EMAIL_API_KEY
+# EMAIL_API_KEY=cfes_xxxxxxxx

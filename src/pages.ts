@@ -34,6 +34,7 @@ function isReserved(path: string): boolean {
     p === 'login' ||
     p === 'token' ||
     p === 'register' ||
+    p === 'api' ||
     p === '.well-known'
   )
 }

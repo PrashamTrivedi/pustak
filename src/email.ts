@@ -1,23 +1,34 @@
-// OTP delivery. Workers cannot speak SMTP, so we POST to Resend's HTTP API.
-// If RESEND_API_KEY is unset we degrade gracefully for local dev by logging the
-// code to the console (visible under `wrangler dev`) instead of throwing.
+// OTP delivery via our own cfEmailSender Worker (https://mail.prashamhtrivedi.app),
+// reached over a worker-to-worker service binding (env.EMAIL_SENDER) — no
+// third-party email provider. cfEmailSender's POST /api/send takes an x-api-key
+// and delivers through Cloudflare Email Service.
+//
+// If EMAIL_API_KEY is unset we fail CLOSED in production (throw) rather than
+// silently leaking codes — only the explicit local-dev opt-in OTP_DEV_ECHO=1
+// logs the code to the console instead of calling the binding.
 import type { Bindings } from './types'
 
 export async function sendOtpEmail(env: Bindings, to: string, code: string): Promise<void> {
-  if (!env.RESEND_API_KEY) {
-    console.log(`[pustak] DEV: OTP for ${to} is ${code} (set RESEND_API_KEY to send real email)`)
-    return
+  if (!env.EMAIL_API_KEY) {
+    if (env.OTP_DEV_ECHO === '1') {
+      console.log(`[pustak] DEV: OTP for ${to} is ${code} (OTP_DEV_ECHO=1; set EMAIL_API_KEY to send real email)`)
+      return
+    }
+    // Fail closed: never report success without actually sending.
+    throw new Error('EMAIL_API_KEY is not configured (and OTP_DEV_ECHO is not set)')
   }
 
-  const res = await fetch('https://api.resend.com/emails', {
+  // The service binding routes straight to the cf-email-sender Worker; the host
+  // in the URL is irrelevant (it dispatches on path), but we keep it readable.
+  const res = await env.EMAIL_SENDER.fetch('https://mail.prashamhtrivedi.app/api/send', {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'x-api-key': env.EMAIL_API_KEY,
       'content-type': 'application/json',
     },
     body: JSON.stringify({
       from: env.OTP_FROM_EMAIL,
-      to,
+      to: [to],
       subject: `${code} is your Pustak login code`,
       text: `Your Pustak login code is ${code}. It expires in 10 minutes.\n\nIf you didn't request this, you can ignore this email.`,
       html: otpEmailHtml(code),
@@ -26,7 +37,7 @@ export async function sendOtpEmail(env: Bindings, to: string, code: string): Pro
 
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    throw new Error(`Resend send failed: ${res.status} ${detail}`)
+    throw new Error(`cfEmailSender send failed: ${res.status} ${detail}`)
   }
 }
 

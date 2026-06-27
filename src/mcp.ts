@@ -196,5 +196,5 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
 /** Mirror of the reserved-path rule for MCP writes. */
 function isReservedKey(key: string): boolean {
   const first = key.split('/')[0]
-  return ['_browse', '_docs', '_openapi.json', '_list', '_login', 'authorize', 'login', 'token', 'register', '.well-known'].includes(first)
+  return ['_browse', '_docs', '_openapi.json', '_list', '_login', 'authorize', 'login', 'token', 'register', 'api', '.well-known'].includes(first)
 }

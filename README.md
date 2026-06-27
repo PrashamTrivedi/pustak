@@ -100,65 +100,100 @@ through the email + OTP login, and connect — no manual client setup.
 
 ## Authentication
 
-Two independent auth paths coexist:
+Auth is split across two libraries that each own one layer:
 
-- **OAuth 2.1 + email/OTP** (for MCP and account sign-in). The provider
-  (`@cloudflare/workers-oauth-provider`) implements `/token`, `/register` and the
-  `.well-known` discovery documents. The `/authorize` login UI and the standalone
-  `/_login` page run the passwordless flow: enter email → receive a 6-digit code
-  → verify. First sign-in creates the account. OTP codes and accounts live in the
-  `AUTH_KV` namespace; grants/tokens live in `OAUTH_KV`.
-- **Legacy `Authorization: Bearer <API_TOKEN>`** still guards the REST
-  write/list API documented above. If `API_TOKEN` is unset, that REST API is
-  closed and the MCP server is the way in.
+- **Identity — [Better Auth](https://better-auth.com)** on **D1**. Better Auth
+  owns the `user` / `session` / `account` / `verification` tables and the
+  passwordless **email-OTP** flow (its `emailOTP` plugin generates, stores and
+  verifies the 6-digit code, with a built-in attempt limit; first sign-in
+  auto-creates the account). It's called server-side (`auth.api.*`); its raw
+  HTTP surface (`/api/auth/*`) is intentionally **not** mounted publicly.
+- **OAuth protocol — `@cloudflare/workers-oauth-provider`** is the OAuth 2.1
+  authorization server: it implements `/token`, `/register` and the
+  `.well-known` discovery documents, and bearer-validates `/mcp`. Grants/tokens
+  live in `OAUTH_KV`.
 
-OTP email is sent via [Resend](https://resend.com) (`RESEND_API_KEY`). In local
-dev with no key set, the code is logged to the console instead.
+The two meet at the login UI (`src/auth.ts`): the `/authorize` page (and the
+standalone `/_login`) collect email → OTP, call Better Auth's server API to
+verify and sign in, then hand the resulting user identity to the OAuth
+provider's `completeAuthorization()` — minting the grant whose `props` flow into
+the MCP server. The OAuth access token, not the Better Auth session, is the
+durable MCP credential.
+
+OTP issuance (`/login/start`) is throttled per client IP and per email by two
+Cloudflare `ratelimit` bindings (enforced on Cloudflare's network, no-ops in
+local dev) to blunt email-bomb / cost abuse.
+
+The legacy **`Authorization: Bearer <API_TOKEN>`** path still guards the REST
+write/list API documented above. If `API_TOKEN` is unset, that REST API is
+closed and the MCP server is the way in.
+
+OTP email is delivered by our own **cfEmailSender** Worker
+(`mail.prashamhtrivedi.app`) over a worker-to-worker **service binding**
+(`EMAIL_SENDER`), authenticated with `EMAIL_API_KEY` (`x-api-key`) — no
+third-party email provider. In local dev with no key set, the code is logged to
+the console instead.
 
 ## Setup & deploy
 
 ```bash
 npm install
 
-# Create the R2 bucket and the two KV namespaces, then paste the printed ids
-# into wrangler.jsonc (OAUTH_KV / AUTH_KV).
+# R2 bucket, the OAuth KV namespace, and the Better Auth D1 database.
+# Paste the printed ids into wrangler.jsonc (OAUTH_KV.id / d1_databases[].database_id).
 npx wrangler r2 bucket create pustak-pages
 npx wrangler kv namespace create OAUTH_KV
-npx wrangler kv namespace create AUTH_KV
+npx wrangler d1 create pustak-auth
+
+# Apply the Better Auth schema to D1
+npx wrangler d1 migrations apply pustak-auth --remote
 
 # Secrets
-npx wrangler secret put RESEND_API_KEY   # for OTP email delivery
-npx wrangler secret put API_TOKEN        # optional: legacy REST write API
+npx wrangler secret put BETTER_AUTH_SECRET   # openssl rand -base64 32
+npx wrangler secret put EMAIL_API_KEY        # cfEmailSender x-api-key for OTP email
+npx wrangler secret put API_TOKEN            # optional: legacy REST write API
 
 # Deploy (binds the custom domain pustak.prashamhtrivedi.app)
 npm run deploy
 ```
 
-`OWNER_EMAIL` and `OTP_FROM_EMAIL` are plain `vars` in `wrangler.jsonc`. The
-custom domain route requires the `prashamhtrivedi.app` zone to be active on the
-same Cloudflare account, and the `OTP_FROM_EMAIL` domain must be verified in
-Resend.
+The `EMAIL_SENDER` service binding targets the `cf-email-sender` Worker, which
+must be deployed on the same Cloudflare account. `OWNER_EMAIL`,
+`OTP_FROM_EMAIL` and `BETTER_AUTH_URL` are plain `vars` in `wrangler.jsonc`;
+`OTP_FROM_EMAIL` must be a bare address on `prashamhtrivedi.app` (cfEmailSender
+rejects display names and other domains). The custom domain route requires the
+`prashamhtrivedi.app` zone to be active on the same account.
+
+The Better Auth D1 schema (`migrations/0001_better_auth.sql`) is generated from
+`scripts/auth-gen.ts` with `npx @better-auth/cli generate` — re-run it if the
+plugin set changes.
 
 ## Local development
 
 ```bash
-cp .dev.vars.example .dev.vars   # optional API_TOKEN / RESEND_API_KEY
-npm run dev                      # R2 + KV + Durable Objects simulated locally
+cp .dev.vars.example .dev.vars                 # set BETTER_AUTH_SECRET; API_TOKEN/EMAIL_API_KEY optional
+npx wrangler d1 migrations apply pustak-auth --local
+npm run dev                                     # R2 + KV + D1 + Durable Objects simulated locally
 ```
 
-Without `RESEND_API_KEY`, request a code at `/_login`, then read it from the
-console output (or local KV) to complete sign-in.
+With `OTP_DEV_ECHO=1` and no `EMAIL_API_KEY`, request a code at `/_login`, then
+read it from the console output (or the local D1 `verification` table) to
+complete sign-in. In production, a missing `EMAIL_API_KEY` fails closed (no code
+is ever logged).
 
 ## Project layout
 
 - `src/index.ts` — wires the OAuth provider to the MCP API handler and the
-  default (login + pages) handler.
+  default handler (Better Auth `/api/auth/*` + login + pages).
 - `src/mcp.ts` — the MCP server (`PustakMCP` Durable Object): tools, resources, prompt.
-- `src/auth.ts` — `/authorize`, `/_login`, and the `/login/start` + `/login/verify` OTP flow.
-- `src/store.ts` / `src/email.ts` — OTP + account storage, and Resend delivery.
+- `src/betterAuth.ts` — the Better Auth instance (D1 + email-OTP identity layer).
+- `src/auth.ts` — `/authorize`, `/_login`, and the OTP flow that bridges Better Auth → the OAuth grant.
+- `src/email.ts` — OTP delivery via the cfEmailSender service binding.
+- `src/util.ts` — small shared helpers (email normalisation/validation).
 - `src/pages.ts` — the page store, REST API and branded page serving.
 - `src/branding.ts` — the injected Pustak mark for shared pages.
 - `src/login-ui.ts` — the branded login screens.
 - `src/explainer.ts` — the `explainer` prompt body (fill this in).
-- `wrangler.jsonc` — Worker config: R2, KV, the `PustakMCP` Durable Object, vars.
+- `migrations/` — Better Auth D1 schema; `scripts/auth-gen.ts` regenerates it.
+- `wrangler.jsonc` — Worker config: R2, KV, D1, the `PustakMCP` Durable Object, service binding, vars.
 - `.dev.vars.example` — template for local secrets.
