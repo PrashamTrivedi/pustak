@@ -1,7 +1,7 @@
 // Branded login screens shared by the OAuth /authorize flow and the standalone
 // /_login page. Same Indic-pothi palette as the rest of Pustak.
 
-type Step = 'email' | 'code' | 'username' | 'done'
+type Step = 'email' | 'code' | 'username' | 'consent' | 'done'
 
 type LoginPageOpts = {
   step: Step
@@ -13,6 +13,10 @@ type LoginPageOpts = {
   email?: string
   /** Pre-filled slug suggestion (on the username step). */
   slug?: string
+  /** Signed-in username (consent step — one-click approve reusing the session). */
+  username?: string
+  /** "Use a different account" link target (consent step). */
+  switchUrl?: string
   /** Error banner text. */
   error?: string
   /** Optional one-line context under the title (e.g. which app is connecting). */
@@ -119,6 +123,14 @@ export function loginPage(o: LoginPageOpts): string {
         <button type="submit">Claim &amp; continue</button>
       </form>
       <p class="hint">Lowercase letters, numbers and hyphens. This is the permanent home for your pages — all your content lives under it.</p>`
+  } else if (o.step === 'consent') {
+    body = /* html */ `${err}
+      <p class="subtitle" style="margin-top:0">You're already signed in as <strong>@${esc(o.username ?? '')}</strong>${o.email ? ` · ${esc(o.email)}` : ''}.</p>
+      <form method="POST" action="${esc(o.action)}" autocomplete="off">
+        ${hiddenInputs(o.hidden)}
+        <button type="submit">Authorize${o.username ? ` as @${esc(o.username)}` : ''}</button>
+      </form>
+      ${o.switchUrl ? `<p class="hint">Not you? <a href="${esc(o.switchUrl)}">Use a different account</a>.</p>` : ''}`
   } else {
     body = /* html */ `<p class="ok">॥ स्वागतम् ॥</p>
       <p class="subtitle">You're signed in${o.email ? ` as <strong>${esc(o.email)}</strong>` : ''}. You can close this tab and return to Pustak.</p>

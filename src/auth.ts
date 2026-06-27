@@ -57,6 +57,35 @@ async function isRateLimited(c: RlCtx, email: string): Promise<boolean> {
   return results.some((r) => !r.success)
 }
 
+// --- one-click consent: reuse the browser session instead of re-authenticating -
+// A signed-in user connecting an MCP client shouldn't have to re-enter an OTP.
+// /authorize offers a one-click approve, guarded against consent-CSRF by a
+// double-submit nonce: the value lives in both an HttpOnly SameSite=Strict cookie
+// and a hidden form field, and POST /authorize/approve requires the two to match
+// (an attacker can neither read the rendered token cross-origin nor send the
+// Strict cookie cross-site).
+const CONSENT_COOKIE = 'pustak_consent'
+function consentCookie(nonce: string): string {
+  return `${CONSENT_COOKIE}=${nonce}; HttpOnly; Secure; SameSite=Strict; Path=/authorize; Max-Age=600`
+}
+function clearConsentCookie(): string {
+  return `${CONSENT_COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/authorize; Max-Age=0`
+}
+function readConsentCookie(req: Request): string {
+  const m = (req.headers.get('cookie') || '').match(/(?:^|;\s*)pustak_consent=([^;]+)/)
+  return m ? m[1] : ''
+}
+
+/** Human label for the connecting OAuth client, for the sign-in/consent copy. */
+async function appLabel(c: Ctx, oauthReq: AuthRequest): Promise<string | null> {
+  try {
+    const client = await c.env.OAUTH_PROVIDER.lookupClient(oauthReq.clientId)
+    return client?.clientName || client?.clientId || null
+  } catch {
+    return null
+  }
+}
+
 /** Finish the OAuth authorization once we know the user + slug. */
 async function completeOAuth(c: Ctx, oauthReq: AuthRequest, props: Props, cookies: string[]) {
   try {
@@ -78,17 +107,62 @@ export function registerAuthRoutes(app: Hono<{ Bindings: Bindings }>) {
   // OAuth entry point — advertised to clients as authorizeEndpoint.
   app.get('/authorize', async (c) => {
     const oauthReq = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw)
-    let subtitle = 'Sign in to authorize an application.'
-    try {
-      const client = await c.env.OAUTH_PROVIDER.lookupClient(oauthReq.clientId)
-      const name = client?.clientName || client?.clientId
-      if (name) subtitle = `Sign in to connect ${name} to your Pustak.`
-    } catch {
-      /* fall back to the generic subtitle */
+    const name = await appLabel(c, oauthReq)
+
+    // Already signed in (with a slug) in this browser? Reuse the session: show a
+    // one-click consent instead of a fresh OTP login. ?switch=1 forces the form
+    // so the user can sign in as a different account.
+    if (c.req.query('switch') == null) {
+      const user = await getSessionUser(c.env, c.req.raw)
+      const username = user ? await getUsername(c.env, user.id) : null
+      if (user && username) {
+        const nonce = crypto.randomUUID()
+        const sw = new URL(c.req.url)
+        sw.searchParams.set('switch', '1')
+        c.header('set-cookie', consentCookie(nonce), { append: true })
+        return c.html(
+          loginPage({
+            step: 'consent',
+            action: '/authorize/approve',
+            hidden: { oauth: encodeOAuth(oauthReq), consent: nonce },
+            username,
+            email: user.email,
+            switchUrl: sw.pathname + sw.search,
+            subtitle: name ? `Connect ${name} to your Pustak.` : 'Authorize an application.',
+          }),
+        )
+      }
     }
+
+    const subtitle = name ? `Sign in to connect ${name} to your Pustak.` : 'Sign in to authorize an application.'
     return c.html(
       loginPage({ step: 'email', action: '/login/start', hidden: { oauth: encodeOAuth(oauthReq) }, subtitle }),
     )
+  })
+
+  // One-click consent approve: complete the OAuth grant from the existing session.
+  // Requires the double-submit nonce (cookie == form) AND a live session+slug.
+  app.post('/authorize/approve', async (c) => {
+    const form = await c.req.formData()
+    const oauthRaw = form.get('oauth') ? String(form.get('oauth')) : undefined
+    const formNonce = form.get('consent') ? String(form.get('consent')) : ''
+    const cookieNonce = readConsentCookie(c.req.raw)
+
+    if (!oauthRaw || !formNonce || formNonce !== cookieNonce) {
+      return c.html(loginPage({ step: 'email', action: '/login/start', error: 'Your authorization request expired. Please start again from the application.' }), 400)
+    }
+    const user = await getSessionUser(c.env, c.req.raw)
+    if (!user) {
+      return c.html(loginPage({ step: 'email', action: '/login/start', hidden: { oauth: oauthRaw }, error: 'Please sign in to continue.' }), 401)
+    }
+    const username = await getUsername(c.env, user.id)
+    // Signed in but no slug yet (rare): route through onboarding, carrying oauth.
+    if (!username) {
+      return c.html(loginPage({ step: 'username', action: '/_choose-username', slug: slugifyEmail(user.email), hidden: { oauth: oauthRaw }, subtitle: `Welcome, ${user.email}` }))
+    }
+    const oauthReq = decodeOAuth(oauthRaw)
+    if (!oauthReq) return c.html(loginPage({ step: 'email', action: '/login/start', error: 'Your sign-in session expired. Please start again.' }), 400)
+    return completeOAuth(c, oauthReq, { userId: user.id, email: user.email, username }, [clearConsentCookie()])
   })
 
   // Standalone sign-in / account creation (linked from the branding mark).
