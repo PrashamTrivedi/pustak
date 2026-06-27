@@ -73,8 +73,6 @@
     }
   ],
   "vars": {
-    // The owner all pre-existing pages belong to.
-    "OWNER_EMAIL": "me@prashamhtrivedi.in",
     // From-address for OTP emails. cfEmailSender requires a bare address on the
     // ALLOWED_FROM_DOMAIN (prashamhtrivedi.app) — no display name.
     "OTP_FROM_EMAIL": "pustak@prashamhtrivedi.app",

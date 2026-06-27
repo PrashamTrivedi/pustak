@@ -1,5 +1,5 @@
 // Bindings = the wrangler-generated env (BUCKET, OAUTH_KV, DB, PustakMCP,
-// EMAIL_SENDER, OWNER_EMAIL, OTP_FROM_EMAIL, BETTER_AUTH_URL — see
+// EMAIL_SENDER, OTP_FROM_EMAIL, BETTER_AUTH_URL, LOGIN_RATELIMIT_* — see
 // worker-configuration.d.ts) plus the secrets and the OAuthProvider helper that
 // aren't declared in wrangler.jsonc.
 export type Bindings = Cloudflare.Env & {
