@@ -26,5 +26,13 @@
     "better-sqlite3": "^12.11.1",
     "typescript": "^5.7.2",
     "wrangler": "^4.83.0"
+  },
+  "comment:overrides": "@better-auth/cli is a dev-only migration generator (not bundled into the Worker). Its transitive deps carry advisories with no upstream fix; pin them to patched versions. Runtime better-auth is already >=1.6.2.",
+  "overrides": {
+    "drizzle-orm": "^0.45.2",
+    "lodash": "^4.17.23",
+    "@better-auth/cli": {
+      "better-auth": "$better-auth"
+    }
   }
 }
