@@ -3,8 +3,6 @@
 // worker-configuration.d.ts) plus the secrets and the OAuthProvider helper that
 // aren't declared in wrangler.jsonc.
 export type Bindings = Cloudflare.Env & {
-  /** Legacy Bearer token guarding the REST write/list API. Optional now. */
-  API_TOKEN?: string
   /** cfEmailSender API key (x-api-key). Required in prod; see OTP_DEV_ECHO. */
   EMAIL_API_KEY?: string
   /** Local-dev opt-in: when '1' and EMAIL_API_KEY is unset, log OTP to console. */
@@ -19,4 +17,6 @@ export type Bindings = Cloudflare.Env & {
 export type Props = {
   userId: string
   email: string
+  /** The user's URL slug; their pages live under this R2 prefix. */
+  username: string
 }

@@ -1,7 +1,7 @@
 // Branded login screens shared by the OAuth /authorize flow and the standalone
 // /_login page. Same Indic-pothi palette as the rest of Pustak.
 
-type Step = 'email' | 'code' | 'done'
+type Step = 'email' | 'code' | 'username' | 'done'
 
 type LoginPageOpts = {
   step: Step
@@ -11,6 +11,8 @@ type LoginPageOpts = {
   hidden?: Record<string, string>
   /** Pre-filled email (on the code step). */
   email?: string
+  /** Pre-filled slug suggestion (on the username step). */
+  slug?: string
   /** Error banner text. */
   error?: string
   /** Optional one-line context under the title (e.g. which app is connecting). */
@@ -58,6 +60,11 @@ const SHELL_HEAD = /* html */ `<meta charset="utf-8" />
     background:#fbf3dc;border:1.5px solid var(--rule);border-radius:5px;outline:none;}
   input:focus{border-color:var(--sindoor);box-shadow:0 0 0 3px rgba(178,48,24,.14);}
   input[name=code]{letter-spacing:.4em;font-size:1.3rem;text-align:center;font-weight:700;}
+  .slugrow{display:flex;align-items:stretch;border:1.5px solid var(--rule);border-radius:5px;background:#fbf3dc;overflow:hidden;}
+  .slugrow:focus-within{border-color:var(--sindoor);box-shadow:0 0 0 3px rgba(178,48,24,.14);}
+  .slugpre{display:flex;align-items:center;padding:0 4px 0 11px;font-size:.82rem;color:var(--ink-faint);white-space:nowrap;}
+  .slugrow input{border:0;border-radius:0;padding-left:2px;font-weight:600;}
+  .slugrow input:focus{box-shadow:none;}
   button{margin-top:16px;width:100%;padding:12px;font-family:var(--text);font-weight:700;font-size:1rem;letter-spacing:.02em;
     color:#fdf3da;background:var(--sindoor);border:none;border-radius:5px;cursor:pointer;box-shadow:0 10px 22px -14px var(--sindoor-deep);}
   button:hover{background:var(--sindoor-deep);}
@@ -101,6 +108,17 @@ export function loginPage(o: LoginPageOpts): string {
         <button type="submit">Verify &amp; continue</button>
       </form>
       <p class="hint">Didn't get it? <a href="${esc(o.action.replace(/verify$/, 'start'))}">Start over</a>.</p>`
+  } else if (o.step === 'username') {
+    body = /* html */ `${err}
+      <form method="POST" action="${esc(o.action)}" autocomplete="off">
+        ${hiddenInputs(o.hidden)}
+        <label for="username">Choose your username</label>
+        <div class="slugrow"><span class="slugpre">pustak.prashamhtrivedi.app/</span><input id="username" name="username" type="text"
+          inputmode="text" autocapitalize="off" spellcheck="false" pattern="[a-z0-9][a-z0-9-]{0,30}[a-z0-9]"
+          placeholder="your-name" value="${esc(o.slug ?? '')}" required autofocus /></div>
+        <button type="submit">Claim &amp; continue</button>
+      </form>
+      <p class="hint">Lowercase letters, numbers and hyphens. This is the permanent home for your pages — all your content lives under it.</p>`
   } else {
     body = /* html */ `<p class="ok">॥ स्वागतम् ॥</p>
       <p class="subtitle">You're signed in${o.email ? ` as <strong>${esc(o.email)}</strong>` : ''}. You can close this tab and return to Pustak.</p>

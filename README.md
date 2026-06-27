@@ -3,81 +3,60 @@
 A tiny Cloudflare Worker that stores standalone HTML pages in R2 and serves them.
 Built with [Hono](https://hono.dev). Live at **https://pustak.prashamhtrivedi.app**.
 
-The path *is* the storage key — `PUT /docs/intro` stores a page that's then served
-at `GET /docs/intro`. No database, no build step for the pages themselves.
+Each user signs in (passwordless email + OTP) and picks a unique **username
+slug**. Their pages live under that slug as the first path segment — `PUT
+/<username>/docs/intro` stores a page served publicly at
+`GET /<username>/docs/intro`.
 
-On top of the page store, Pustak now ships:
+On top of the page store, Pustak ships:
 
+- **Accounts + a signed-in dashboard** — the homepage is the bucket browser for
+  your own pages; anonymous visitors are redirected to login. No API token.
 - **A remote MCP server** at `/mcp` (Streamable HTTP) exposing tools, resources
   and an `explainer` prompt — see [MCP server](#mcp-server).
 - **OAuth 2.1 with passwordless email + OTP login** — MCP clients (e.g. Claude)
-  authenticate via standard OAuth; users sign in with a one-time code emailed to
-  them. See [Authentication](#authentication).
+  authenticate via standard OAuth. See [Authentication](#authentication).
 - **Pustak branding on shared pages** — every served HTML page carries an
   unobtrusive, dismissible mark inviting visitors to sign in / create an account,
   without getting in the way of reading.
 
-Pre-existing pages are owned by `me@prashamhtrivedi.in` (the configured
-`OWNER_EMAIL`); pages written through the MCP server are owned by the signed-in
-account.
-
 ## API
 
-Reads are public. Writes/deletes/listing require `Authorization: Bearer <API_TOKEN>`.
+Reads are public. Writes/deletes/listing are authenticated by your **browser
+session** (the same cookie set at login — there is no API token) and scoped to
+your own username slug.
 
-| Method   | Path        | Auth | Description                                              |
-| -------- | ----------- | ---- | ------------------------------------------------------- |
-| `GET`    | `/<path>`   | —    | Serve the stored page. `/` and `/foo/` → `index.html`.  |
-| `PUT`    | `/<path>`   | ✅   | Create/replace a page. Body = page content.             |
-| `POST`   | `/<path>`   | ✅   | Same as `PUT`.                                          |
-| `DELETE` | `/<path>`   | ✅   | Delete a page. 404 if it doesn't exist.                 |
-| `GET`    | `/_list`    | ✅   | List stored pages. Optional `?prefix=`. (reserved path) |
+| Method   | Path                  | Auth | Description                                             |
+| -------- | --------------------- | ---- | ------------------------------------------------------ |
+| `GET`    | `/<username>/<path>`  | —    | Serve a stored page (public). `…/` → `index.html`.     |
+| `PUT`    | `/<username>/<path>`  | 🍪   | Create/replace one of *your* pages. Body = content.    |
+| `POST`   | `/<username>/<path>`  | 🍪   | Same as `PUT`.                                         |
+| `DELETE` | `/<username>/<path>`  | 🍪   | Delete one of *your* pages.                            |
+| `GET`    | `/_list`              | 🍪   | List *your* pages (paths are slug-relative).           |
+
+🍪 = requires your login session; you may only write/delete under your own slug
+(cross-slug writes → 403).
 
 The Worker stores whatever `Content-Type` you send and replays it on `GET`
-(defaults to `text/html; charset=utf-8`). **Send `-H "content-type: text/html"`
-when uploading HTML** — otherwise the client default (e.g. curl's
-`application/x-www-form-urlencoded`) is what gets stored and served back.
+(defaults to `text/html; charset=utf-8`). Paths beginning with `_` and the
+OAuth/auth routes are reserved and cannot be used as slugs or stored as pages.
 
-Paths beginning with `_` (`/_list`, `/_browse`, `/_docs`, `/_openapi.json`) are
-reserved by the Worker and cannot be stored as pages (write/delete → 403).
+## Pages & dashboard
 
-## Admin pages
+- **`/`** and **`/_browse`** — your signed-in dashboard: list, view, upload and
+  delete your own pages. Redirects to `/_login` when signed out.
+- **`/_login`** — passwordless email + OTP sign-in / account creation.
+- **`/_choose-username`** — first-login slug picker.
+- **`/_docs`** / **`/_openapi.json`** — Swagger UI + OpenAPI 3.1 spec (the
+  "try it out" calls ride your browser session).
 
-Public HTML, served by the Worker (the *operations* they perform still need the token):
-
-- **`/`** — bucket browser when no `index.html` is stored. Paste the token to
-  list, view, upload, and delete pages from the browser.
-- **`/_browse`** — the bucket browser, always (even when an `index.html` exists at `/`).
-- **`/_docs`** — Swagger UI for the API (temporary; backed by `/_openapi.json`).
-  Click *Authorize* and paste the token to let an agent or human call endpoints.
-- **`/_openapi.json`** — the OpenAPI 3.1 spec (server URL set to the request origin).
-
-### Examples
+### Example
 
 ```bash
 BASE=https://pustak.prashamhtrivedi.app
-TOKEN=...   # the API_TOKEN secret
-
-# Upload an HTML file
-curl -X PUT "$BASE/landing" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "content-type: text/html" \
-  --data-binary @page.html
-
-# View it
-curl "$BASE/landing"
-
-# Update a nested page
-curl -X PUT "$BASE/docs/intro" \
-  -H "Authorization: Bearer $TOKEN" -H "content-type: text/html" \
-  --data-binary @intro.html
-
-# List everything (or a subtree)
-curl "$BASE/_list"            -H "Authorization: Bearer $TOKEN"
-curl "$BASE/_list?prefix=docs/" -H "Authorization: Bearer $TOKEN"
-
-# Delete
-curl -X DELETE "$BASE/landing" -H "Authorization: Bearer $TOKEN"
+# Sign in at $BASE/_login in a browser; the session cookie authenticates writes.
+# Public reads need no auth:
+curl "$BASE/prash-h-trivedi/explainers/after-automation.html"
 ```
 
 ## MCP server
@@ -115,18 +94,16 @@ Auth is split across two libraries that each own one layer:
 
 The two meet at the login UI (`src/auth.ts`): the `/authorize` page (and the
 standalone `/_login`) collect email → OTP, call Better Auth's server API to
-verify and sign in, then hand the resulting user identity to the OAuth
-provider's `completeAuthorization()` — minting the grant whose `props` flow into
-the MCP server. The OAuth access token, not the Better Auth session, is the
-durable MCP credential.
+verify and sign in, then on first login the user picks a unique **username slug**
+(`/_choose-username`). For browser use, Better Auth's **session cookie** is set
+and authenticates the dashboard + write/delete/list (each user scoped to their
+own slug). For MCP, the identity is handed to the OAuth provider's
+`completeAuthorization()` — minting the grant whose `props` (including the slug)
+flow into the MCP server; the OAuth access token is the durable MCP credential.
 
 OTP issuance (`/login/start`) is throttled per client IP and per email by two
 Cloudflare `ratelimit` bindings (enforced on Cloudflare's network, no-ops in
 local dev) to blunt email-bomb / cost abuse.
-
-The legacy **`Authorization: Bearer <API_TOKEN>`** path still guards the REST
-write/list API documented above. If `API_TOKEN` is unset, that REST API is
-closed and the MCP server is the way in.
 
 OTP email is delivered by our own **cfEmailSender** Worker
 (`mail.prashamhtrivedi.app`) over a worker-to-worker **service binding**
@@ -151,14 +128,13 @@ npx wrangler d1 migrations apply pustak-auth --remote
 # Secrets
 npx wrangler secret put BETTER_AUTH_SECRET   # openssl rand -base64 32
 npx wrangler secret put EMAIL_API_KEY        # cfEmailSender x-api-key for OTP email
-npx wrangler secret put API_TOKEN            # optional: legacy REST write API
 
 # Deploy (binds the custom domain pustak.prashamhtrivedi.app)
 npm run deploy
 ```
 
 The `EMAIL_SENDER` service binding targets the `cf-email-sender` Worker, which
-must be deployed on the same Cloudflare account. `OWNER_EMAIL`,
+must be deployed on the same Cloudflare account.
 `OTP_FROM_EMAIL` and `BETTER_AUTH_URL` are plain `vars` in `wrangler.jsonc`;
 `OTP_FROM_EMAIL` must be a bare address on `prashamhtrivedi.app` (cfEmailSender
 rejects display names and other domains). The custom domain route requires the
@@ -171,10 +147,13 @@ plugin set changes.
 ## Local development
 
 ```bash
-cp .dev.vars.example .dev.vars                 # set BETTER_AUTH_SECRET; API_TOKEN/EMAIL_API_KEY optional
+cp .dev.vars.example .dev.vars                 # set BETTER_AUTH_SECRET; BETTER_AUTH_URL=http://localhost:<port>
 npx wrangler d1 migrations apply pustak-auth --local
 npm run dev                                     # R2 + KV + D1 + Durable Objects simulated locally
 ```
+
+Locally, set `BETTER_AUTH_URL` to your `http://localhost:<port>` so the session
+cookie isn't marked `Secure` (otherwise it won't be sent over http).
 
 With `OTP_DEV_ECHO=1` and no `EMAIL_API_KEY`, request a code at `/_login`, then
 read it from the console output (or the local D1 `verification` table) to
@@ -183,17 +162,18 @@ is ever logged).
 
 ## Project layout
 
-- `src/index.ts` — wires the OAuth provider to the MCP API handler and the
-  default handler (Better Auth `/api/auth/*` + login + pages).
-- `src/mcp.ts` — the MCP server (`PustakMCP` Durable Object): tools, resources, prompt.
+- `src/index.ts` — wires the OAuth provider to the MCP API handler and the default (login + pages) handler.
+- `src/mcp.ts` — the MCP server (`PustakMCP` Durable Object): slug-scoped tools, resources, prompt.
 - `src/betterAuth.ts` — the Better Auth instance (D1 + email-OTP identity layer).
-- `src/auth.ts` — `/authorize`, `/_login`, and the OTP flow that bridges Better Auth → the OAuth grant.
+- `src/auth.ts` — `/authorize`, `/_login`, `/_choose-username`, `/logout`, the OTP flow + OAuth bridge.
+- `src/session.ts` — browser session helpers (set/read/clear the Better Auth cookie).
+- `src/users.ts` — username slugs: validation, reserved words, claim via D1.
 - `src/email.ts` — OTP delivery via the cfEmailSender service binding.
 - `src/util.ts` — small shared helpers (email normalisation/validation).
-- `src/pages.ts` — the page store, REST API and branded page serving.
+- `src/pages.ts` — the page store, session-scoped REST API, branded serving, legacy redirects.
 - `src/branding.ts` — the injected Pustak mark for shared pages.
-- `src/login-ui.ts` — the branded login screens.
+- `src/login-ui.ts` / `src/ui.ts` — the branded login screens and the session-based dashboard.
 - `src/explainer.ts` — the `explainer` prompt body (fill this in).
-- `migrations/` — Better Auth D1 schema; `scripts/auth-gen.ts` regenerates it.
+- `migrations/` — Better Auth D1 schema + username column; `scripts/auth-gen.ts` regenerates the base schema.
 - `wrangler.jsonc` — Worker config: R2, KV, D1, the `PustakMCP` Durable Object, service binding, vars.
 - `.dev.vars.example` — template for local secrets.

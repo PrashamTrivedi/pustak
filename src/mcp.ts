@@ -16,14 +16,19 @@ const DEFAULT_CONTENT_TYPE = 'text/html; charset=utf-8'
 export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
   server = new McpServer({ name: 'pustak', version: '1.0.0' })
 
-  /** The signed-in email, or a clear marker if props somehow weren't set. */
   private get email(): string {
     return this.props?.email ?? 'unknown'
   }
 
-  private owns(customMetadata?: Record<string, string>): boolean {
-    const owner = customMetadata?.owner || this.env.OWNER_EMAIL
-    return owner === this.email || this.email === this.env.OWNER_EMAIL
+  /** The caller's slug — their pages live under this R2 prefix. */
+  private get username(): string {
+    return this.props?.username ?? ''
+  }
+
+  /** Resolve a user-supplied, slug-relative path to a full R2 key under their slug. */
+  private key(path: string): string {
+    const rel = String(path).replace(/^\/+/, '').replace(new RegExp('^' + this.username + '/'), '')
+    return toKey(this.username + '/' + rel)
   }
 
   async init() {
@@ -32,35 +37,30 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
     // --- Tools ---------------------------------------------------------------
     server.registerTool(
       'whoami',
-      { title: 'Who am I', description: 'Return the authenticated Pustak account.' },
-      async () => ({ content: [{ type: 'text', text: `You are signed in as ${this.email}.` }] }),
+      { title: 'Who am I', description: 'Return the authenticated Pustak account and its page space.' },
+      async () => ({ content: [{ type: 'text', text: `You are ${this.email} (@${this.username}). Your pages live under /${this.username}/.` }] }),
     )
 
     server.registerTool(
       'list_pages',
       {
         title: 'List pages',
-        description: 'List stored pages, optionally filtered by a key prefix.',
-        inputSchema: { prefix: z.string().optional().describe('Only keys starting with this prefix.') },
+        description: 'List your stored pages, optionally filtered by a slug-relative prefix.',
+        inputSchema: { prefix: z.string().optional().describe('Only paths starting with this (within your space).') },
       },
       async ({ prefix }) => {
-        const pages: { key: string; size: number; uploaded: string; owner: string }[] = []
+        const base = this.username + '/'
+        const full = base + (prefix ? String(prefix).replace(/^\/+/, '') : '')
+        const pages: { path: string; size: number; uploaded: string }[] = []
         let cursor: string | undefined
         do {
-          const listing = await this.env.BUCKET.list({ prefix, cursor, include: ['customMetadata'] })
+          const listing = await this.env.BUCKET.list({ prefix: full, cursor })
           for (const o of listing.objects) {
-            pages.push({
-              key: o.key,
-              size: o.size,
-              uploaded: o.uploaded.toISOString(),
-              owner: o.customMetadata?.owner || this.env.OWNER_EMAIL,
-            })
+            pages.push({ path: o.key.slice(base.length), size: o.size, uploaded: o.uploaded.toISOString() })
           }
           cursor = listing.truncated ? listing.cursor : undefined
         } while (cursor)
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ count: pages.length, pages }, null, 2) }],
-        }
+        return { content: [{ type: 'text', text: JSON.stringify({ count: pages.length, username: this.username, pages }, null, 2) }] }
       },
     )
 
@@ -68,13 +68,13 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
       'read_page',
       {
         title: 'Read page',
-        description: 'Return the stored content of a page by its path/key.',
-        inputSchema: { path: z.string().describe('Page path, e.g. "docs/intro".') },
+        description: 'Return the content of one of your pages by its slug-relative path.',
+        inputSchema: { path: z.string().describe('Slug-relative path, e.g. "explainers/intro".') },
       },
       async ({ path }) => {
-        const key = toKey(path)
+        const key = this.key(path)
         const obj = await this.env.BUCKET.get(key)
-        if (!obj) return { isError: true, content: [{ type: 'text', text: `Not found: ${key}` }] }
+        if (!obj) return { isError: true, content: [{ type: 'text', text: `Not found: /${key}` }] }
         return { content: [{ type: 'text', text: await obj.text() }] }
       },
     )
@@ -83,27 +83,21 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
       'write_page',
       {
         title: 'Write page',
-        description: 'Create or replace a page. The page is owned by your account.',
+        description: 'Create or replace a page in your space. Served at /<username>/<path>.',
         inputSchema: {
-          path: z.string().describe('Page path, e.g. "docs/intro".'),
+          path: z.string().describe('Slug-relative path, e.g. "explainers/intro".'),
           content: z.string().describe('The page body (usually HTML).'),
           contentType: z.string().optional().describe('MIME type. Defaults to text/html.'),
         },
       },
       async ({ path, content, contentType }) => {
-        const key = toKey(path)
-        if (isReservedKey(key)) {
-          return { isError: true, content: [{ type: 'text', text: `Reserved path: ${key}` }] }
-        }
-        const existing = await this.env.BUCKET.head(key)
-        if (existing && !this.owns(existing.customMetadata)) {
-          return { isError: true, content: [{ type: 'text', text: `Forbidden: ${key} belongs to another account.` }] }
-        }
+        if (!this.username) return { isError: true, content: [{ type: 'text', text: 'No username on this account.' }] }
+        const key = this.key(path)
         await this.env.BUCKET.put(key, content, {
           httpMetadata: { contentType: contentType || DEFAULT_CONTENT_TYPE },
           customMetadata: { owner: this.email },
         })
-        return { content: [{ type: 'text', text: `Saved ${key} (${content.length} bytes), owner ${this.email}.` }] }
+        return { content: [{ type: 'text', text: `Saved /${key} (${content.length} bytes).` }] }
       },
     )
 
@@ -111,18 +105,15 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
       'delete_page',
       {
         title: 'Delete page',
-        description: 'Delete a page you own.',
-        inputSchema: { path: z.string().describe('Page path, e.g. "docs/intro".') },
+        description: 'Delete one of your pages by its slug-relative path.',
+        inputSchema: { path: z.string().describe('Slug-relative path, e.g. "explainers/intro".') },
       },
       async ({ path }) => {
-        const key = toKey(path)
+        const key = this.key(path)
         const existing = await this.env.BUCKET.head(key)
-        if (!existing) return { isError: true, content: [{ type: 'text', text: `Not found: ${key}` }] }
-        if (!this.owns(existing.customMetadata)) {
-          return { isError: true, content: [{ type: 'text', text: `Forbidden: ${key} belongs to another account.` }] }
-        }
+        if (!existing) return { isError: true, content: [{ type: 'text', text: `Not found: /${key}` }] }
         await this.env.BUCKET.delete(key)
-        return { content: [{ type: 'text', text: `Deleted ${key}.` }] }
+        return { content: [{ type: 'text', text: `Deleted /${key}.` }] }
       },
     )
 
@@ -137,8 +128,8 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
             uri: uri.href,
             text:
               'Pustak stores standalone HTML pages in Cloudflare R2 and serves them from the edge. ' +
-              'The URL path is the storage key. Reads are public; writes are authenticated. ' +
-              `You are signed in as ${this.email}.`,
+              'Each user\'s pages live under their username slug (/<username>/...). Reads are public; ' +
+              `writes are authenticated. You are ${this.email} (@${this.username}).`,
           },
         ],
       }),
@@ -147,29 +138,28 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
     server.registerResource(
       'pages',
       'pustak://pages',
-      { title: 'Page catalogue', description: 'JSON index of all stored pages.', mimeType: 'application/json' },
+      { title: 'Your pages', description: 'JSON index of the pages in your space.', mimeType: 'application/json' },
       async (uri) => {
-        const pages: { key: string; size: number; owner: string }[] = []
+        const base = this.username + '/'
+        const pages: { path: string; size: number }[] = []
         let cursor: string | undefined
         do {
-          const listing = await this.env.BUCKET.list({ cursor, include: ['customMetadata'] })
-          for (const o of listing.objects) {
-            pages.push({ key: o.key, size: o.size, owner: o.customMetadata?.owner || this.env.OWNER_EMAIL })
-          }
+          const listing = await this.env.BUCKET.list({ prefix: base, cursor })
+          for (const o of listing.objects) pages.push({ path: o.key.slice(base.length), size: o.size })
           cursor = listing.truncated ? listing.cursor : undefined
         } while (cursor)
-        return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify({ count: pages.length, pages }, null, 2) }] }
+        return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify({ count: pages.length, username: this.username, pages }, null, 2) }] }
       },
     )
 
     server.registerResource(
       'page',
       new ResourceTemplate('pustak://page/{+path}', { list: undefined }),
-      { title: 'Page', description: 'The stored content of a single page.' },
+      { title: 'Page', description: 'The content of one of your pages (slug-relative path).' },
       async (uri, { path }) => {
-        const key = toKey(Array.isArray(path) ? path.join('/') : String(path))
+        const key = this.key(Array.isArray(path) ? path.join('/') : String(path))
         const obj = await this.env.BUCKET.get(key)
-        if (!obj) return { contents: [{ uri: uri.href, text: `Not found: ${key}` }] }
+        if (!obj) return { contents: [{ uri: uri.href, text: `Not found: /${key}` }] }
         return {
           contents: [{ uri: uri.href, mimeType: obj.httpMetadata?.contentType || DEFAULT_CONTENT_TYPE, text: await obj.text() }],
         }
@@ -191,10 +181,4 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
       }),
     )
   }
-}
-
-/** Mirror of the reserved-path rule for MCP writes. */
-function isReservedKey(key: string): boolean {
-  const first = key.split('/')[0]
-  return ['_browse', '_docs', '_openapi.json', '_list', '_login', 'authorize', 'login', 'token', 'register', 'api', '.well-known'].includes(first)
 }

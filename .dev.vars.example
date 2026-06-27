@@ -4,9 +4,10 @@
 #   openssl rand -base64 32 | wrangler secret put BETTER_AUTH_SECRET
 BETTER_AUTH_SECRET=change-me-openssl-rand-base64-32
 
-# Optional: the legacy Bearer token for the REST write/list API.
-#   wrangler secret put API_TOKEN
-API_TOKEN=change-me-local-dev-token
+# Local dev: point Better Auth at your localhost origin so the session cookie
+# isn't marked Secure (otherwise it won't be sent over http). Match `wrangler
+# dev --port`. In production this comes from wrangler.jsonc vars instead.
+BETTER_AUTH_URL=http://localhost:8787
 
 # Local-dev only: with EMAIL_API_KEY unset, OTP_DEV_ECHO=1 logs the OTP to the
 # console (and it's also in the local D1 verification table) so you can sign in

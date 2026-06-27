@@ -1,8 +1,17 @@
-// Built-in admin pages served from reserved routes. Kept out of index.ts so the
-// Worker logic stays readable. The Swagger page is intended to be temporary.
+// Built-in pages served from reserved routes. Kept out of index.ts so the Worker
+// logic stays readable. The Swagger page is intended to be temporary.
 
-/** Bucket browser — lists pages via /_list, supports view / upload / delete. */
-export const BROWSER_HTML = /* html */ `<!doctype html>
+/** Escape a value for safe interpolation into HTML/JS attribute or text. */
+function esc(s: string): string {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+}
+
+/**
+ * The signed-in dashboard: lists / views / uploads / deletes the user's own
+ * pages (scoped to their slug) using the browser session — no API token.
+ */
+export function dashboardHtml(username: string, email: string): string {
+  return /* html */ `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -90,6 +99,8 @@ export const BROWSER_HTML = /* html */ `<!doctype html>
   button:active { transform: translateY(2px); box-shadow: 0 0 0 var(--sindoor-deep); }
   button.ghost { background: transparent; color: var(--ink); border-color: var(--rule); box-shadow: 0 2px 0 var(--rule); }
   button.ghost:hover { background: var(--paper); }
+  .logout-btn { text-decoration: none; cursor: pointer; border: 1.5px solid var(--rule); background: transparent; color: var(--ink); border-radius: 3px; padding: .5rem 1.1rem; font-weight: 600; font-size: .9rem; box-shadow: 0 2px 0 var(--rule); white-space: nowrap; }
+  .logout-btn:hover { background: var(--paper); color: var(--sindoor-deep); }
 
   #status { font-size: .82rem; color: var(--ink-soft); margin-top: .9rem; min-height: 1.2em; }
   #status::before { content: "॥ "; color: var(--haldi); }
@@ -235,7 +246,7 @@ export const BROWSER_HTML = /* html */ `<!doctype html>
     <p class="invocation" lang="sa">॥ पृष्ठानां सङ्ग्रहः ॥</p>
     <h1 lang="hi">पुस्तक<span class="bindu">।</span></h1>
     <p class="latin">Pustak · pages, served from the edge</p>
-    <p class="colophon" lang="hi">किनारे पर रखे आपके पृष्ठ — read on the open web, write with a key. <a href="/_docs">विवरण · API spec ▸</a></p>
+    <p class="colophon" lang="hi">किनारे पर रखे आपके पृष्ठ — your folios, served from the edge. <a href="/_docs">विवरण · API spec ▸</a></p>
   </header>
 
   <svg class="ornament" width="120" height="34" viewBox="0 0 120 34" fill="none" aria-hidden="true">
@@ -249,10 +260,10 @@ export const BROWSER_HTML = /* html */ `<!doctype html>
 
   <div class="desk">
     <section class="card">
-      <p class="card-label" lang="hi">प्रवेश<small>Access</small></p>
+      <p class="card-label" lang="hi">प्रवेश<small>Signed in</small></p>
       <div class="bar">
-        <label class="field"><span class="tilak">۰</span><input id="token" type="password" placeholder="आपका टोकन · API token" autocomplete="off" /></label>
-        <button id="save" lang="hi">खोलें · Open</button>
+        <span class="field" style="gap:.5rem"><span class="tilak">۰</span><strong>@${esc(username)}</strong><span class="micro" style="margin:0">${esc(email)}</span></span>
+        <a href="/logout" id="logout" class="logout-btn">बाहर · Sign out</a>
         <span id="status"></span>
       </div>
     </section>
@@ -265,8 +276,8 @@ export const BROWSER_HTML = /* html */ `<!doctype html>
             <div class="scribe-meta">
               <div class="field-block">
                 <span class="l">कुंजी · Shelf mark</span>
-                <input id="up-path" type="text" placeholder="docs/intro · index.html" />
-                <span class="micro">the path <em>is</em> the URL it serves — slashes make folders. <code>docs/intro</code> → <code>/docs/intro</code></span>
+                <input id="up-path" type="text" placeholder="explainers/intro · index.html" />
+                <span class="micro">stored under your space — <code>explainers/intro</code> → <code>/${esc(username)}/explainers/intro</code></span>
               </div>
               <label class="drop" id="drop">
                 <input id="up-file" type="file" accept=".html,.htm,text/html" hidden />
@@ -332,12 +343,9 @@ export const BROWSER_HTML = /* html */ `<!doctype html>
 <div class="toast" id="toast" role="status"></div>
 
 <script>
+const USERNAME = ${JSON.stringify(username)};
 const $ = (s) => document.querySelector(s);
-const tokenInput = $('#token'), statusEl = $('#status');
-tokenInput.value = localStorage.getItem('pustak_token') || '';
-
-const token = () => tokenInput.value.trim();
-const auth = () => ({ Authorization: 'Bearer ' + token() });
+const statusEl = $('#status');
 const deva = (n) => String(n).replace(/[0-9]/g, (d) => '०१२३४५६७८९'[d]);
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
 const fmtSize = (n) => n < 1024 ? n + ' B' : n < 1048576 ? (n/1024).toFixed(1) + ' KB' : (n/1048576).toFixed(1) + ' MB';
@@ -346,12 +354,10 @@ const fmtType = (t) => { if (!t) return '—'; const m = /^[^/]+\\/([^;\\s]+)/.e
 function setStatus(msg, err) { statusEl.textContent = msg; statusEl.style.color = err ? 'var(--sindoor)' : ''; }
 
 async function load() {
-  if (!token()) return setStatus('enter your token, then open the book.', true);
-  localStorage.setItem('pustak_token', token());
   setStatus('reading the index…');
   try {
-    const res = await fetch('/_list', { headers: auth() });
-    if (res.status === 401) return setStatus('401 — token not accepted.', true);
+    const res = await fetch('/_list', { credentials: 'same-origin' });
+    if (res.status === 401) { location.href = '/_login'; return; }
     if (!res.ok) return setStatus('error ' + res.status, true);
     const data = await res.json();
     render(data.pages || []);
@@ -374,11 +380,11 @@ function applyView() {
   const rows = $('#rows'), tbl = $('#tbl');
   const q = $('#q').value.trim().toLowerCase();
   const sort = $('#sort').value, dir = sort[0] === '-' ? -1 : 1, key = sort.replace('-', '');
-  const view = allPages.filter((p) => !q || p.key.toLowerCase().includes(q));
+  const view = allPages.filter((p) => !q || p.path.toLowerCase().includes(q));
   view.sort((a, b) => {
     if (key === 'size') return (a.size - b.size) * dir;
     if (key === 'date') return (new Date(a.uploaded) - new Date(b.uploaded)) * dir;
-    return a.key.localeCompare(b.key) * dir;
+    return a.path.localeCompare(b.path) * dir;
   });
   tbl.hidden = false; rows.innerHTML = '';
   if (!view.length) { rows.innerHTML = '<tr><td colspan="6" class="noresult">no paths match “' + esc(q) + '”</td></tr>'; return; }
@@ -386,9 +392,9 @@ function applyView() {
     const tr = document.createElement('tr');
     tr.style.setProperty('--i', i);
     const href = '/' + p.key.split('/').map(encodeURIComponent).join('/');
-    const cut = p.key.lastIndexOf('/');
-    const dirp = cut >= 0 ? esc(p.key.slice(0, cut + 1)) : '';
-    const name = esc(cut >= 0 ? p.key.slice(cut + 1) : p.key);
+    const cut = p.path.lastIndexOf('/');
+    const dirp = cut >= 0 ? esc(p.path.slice(0, cut + 1)) : '';
+    const name = esc(cut >= 0 ? p.path.slice(cut + 1) : p.path);
     const ek = encodeURIComponent(p.key);
     tr.innerHTML =
       '<td class="idx">' + deva(i + 1) + '</td>' +
@@ -444,7 +450,7 @@ function copyLink(href) {
 async function del(key) {
   if (!confirm('Delete "' + key + '" from the book?')) return;
   const href = '/' + key.split('/').map(encodeURIComponent).join('/');
-  const res = await fetch(href, { method: 'DELETE', headers: auth() });
+  const res = await fetch(href, { method: 'DELETE', credentials: 'same-origin' });
   if (res.ok) load(); else setStatus('delete failed: ' + res.status, true);
 }
 
@@ -456,8 +462,9 @@ async function upload() {
   if (file) { body = file; type = file.type || 'text/html; charset=utf-8'; }
   else { body = $('#up-body').value; type = 'text/html; charset=utf-8'; }
   if (!body || (typeof body === 'string' && !body.trim())) return setStatus('nothing to upload.', true);
-  const href = '/' + path.replace(/^\\/+/, '').split('/').map(encodeURIComponent).join('/');
-  const res = await fetch(href, { method: 'PUT', headers: { ...auth(), 'content-type': type }, body });
+  const rel = path.replace(/^\\/+/, '').replace(new RegExp('^' + USERNAME + '/'), '');
+  const href = '/' + [USERNAME].concat(rel.split('/')).map(encodeURIComponent).join('/');
+  const res = await fetch(href, { method: 'PUT', credentials: 'same-origin', headers: { 'content-type': type }, body });
   if (res.ok) { $('#up-path').value = ''; $('#up-file').value = ''; $('#up-body').value = ''; resetDrop(); load(); }
   else setStatus('upload failed: ' + res.status, true);
 }
@@ -470,17 +477,16 @@ fileInput.addEventListener('change', () => { dropName.textContent = fileInput.fi
 ['dragleave', 'dragend', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('dragover'); }));
 drop.addEventListener('drop', (e) => { const dt = e.dataTransfer; if (dt && dt.files.length) { fileInput.files = dt.files; dropName.textContent = dt.files[0].name; } });
 
-$('#save').addEventListener('click', load);
 $('#up-go').addEventListener('click', upload);
-tokenInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
 $('#q').addEventListener('input', applyView);
 $('#sort').addEventListener('change', applyView);
 $('#viewer').addEventListener('click', (e) => { if (e.target.hasAttribute('data-close')) closeViewer(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#viewer').classList.contains('open')) closeViewer(); });
-if (token()) load();
+load();
 </script>
 </body>
 </html>`
+}
 
 /** Swagger UI shell (loaded from CDN), pointed at /_openapi.json. Temporary. */
 export const SWAGGER_HTML = /* html */ `<!doctype html>
@@ -541,13 +547,14 @@ export function openApiSpec(origin: string) {
       title: 'Pustak',
       version: '1.0.0',
       description:
-        'Store and serve standalone HTML pages from R2. The URL path is the storage key. ' +
-        'Reads are public; writes, deletes and listing require a Bearer token.',
+        'Store and serve standalone HTML pages from R2. Each user\'s pages live under their ' +
+        'username slug (/<username>/...). Reads are public; writes, deletes and listing use your ' +
+        'signed-in browser session (same-origin cookie) and are scoped to your own slug.',
     },
     servers: [{ url: origin }],
     components: {
       securitySchemes: {
-        bearerAuth: { type: 'http', scheme: 'bearer', description: 'The API_TOKEN secret.' },
+        cookieAuth: { type: 'apiKey', in: 'cookie', name: 'better-auth.session_token', description: 'Your Pustak browser session — sign in at /_login.' },
       },
     },
     paths: {
@@ -571,7 +578,7 @@ export function openApiSpec(origin: string) {
         },
         put: {
           summary: 'Create or replace a page',
-          security: [{ bearerAuth: [] }],
+          security: [{ cookieAuth: [] }],
           requestBody: {
             required: true,
             description: 'Raw page content. Stored Content-Type mirrors the request (default text/html).',
@@ -586,7 +593,7 @@ export function openApiSpec(origin: string) {
         },
         post: {
           summary: 'Create or replace a page (alias of PUT)',
-          security: [{ bearerAuth: [] }],
+          security: [{ cookieAuth: [] }],
           requestBody: {
             required: true,
             content: { 'text/html': { schema: { type: 'string' } }, 'application/octet-stream': {} },
@@ -595,7 +602,7 @@ export function openApiSpec(origin: string) {
         },
         delete: {
           summary: 'Delete a page',
-          security: [{ bearerAuth: [] }],
+          security: [{ cookieAuth: [] }],
           responses: {
             '200': { description: 'Deleted' },
             '401': { description: 'Unauthorized' },
@@ -607,7 +614,7 @@ export function openApiSpec(origin: string) {
       '/_list': {
         get: {
           summary: 'List stored pages',
-          security: [{ bearerAuth: [] }],
+          security: [{ cookieAuth: [] }],
           parameters: [
             { name: 'prefix', in: 'query', required: false, schema: { type: 'string' }, description: 'Filter by key prefix.' },
           ],
