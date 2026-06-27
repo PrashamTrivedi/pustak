@@ -19,7 +19,7 @@
   "kv_namespaces": [
     {
       "binding": "OAUTH_KV",
-      "id": "REPLACE_WITH_OAUTH_KV_ID"
+      "id": "8b79868a01f547519fc50b7b824e5783"
     }
   ],
   // D1 database backing Better Auth (user / session / account / verification).
@@ -29,7 +29,7 @@
     {
       "binding": "DB",
       "database_name": "pustak-auth",
-      "database_id": "REPLACE_WITH_D1_ID",
+      "database_id": "e58e7a85-19ee-4a00-9ca3-726a6d11bfaa",
       "migrations_dir": "migrations"
     }
   ],
