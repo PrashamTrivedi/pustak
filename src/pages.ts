@@ -158,7 +158,8 @@ async function servePage(c: AppCtx, key: string): Promise<Response> {
   if (!headers.has('content-type')) headers.set('content-type', DEFAULT_CONTENT_TYPE)
 
   if (isHtmlContentType(headers.get('content-type') ?? undefined)) {
-    const html = injectBranding(await object.text())
+    const signedIn = !!(await getSessionUser(c.env, c.req.raw))
+    const html = injectBranding(await object.text(), { signedIn })
     headers.delete('content-length')
     return new Response(html, { headers })
   }

@@ -16,6 +16,9 @@ function brandingBadge(): string {
     gap:10px;padding:7px 12px;border-radius:999px;font-family:system-ui,"Mukta",sans-serif;font-size:13px;
     line-height:1;color:#2d1f08;background:rgba(239,225,191,.92);border:1.5px solid #c9ad72;
     box-shadow:0 8px 22px -14px rgba(74,51,15,.9);backdrop-filter:saturate(1.1) blur(2px);}
+  /* The ID selector above out-specifies the UA [hidden] display:none rule, so
+     without this the hidden attribute would not hide the mark (dismiss no-op). */
+  #pustak-mark[hidden]{display:none !important;}
   #pustak-mark-home{font-family:Georgia,serif;color:#b23018;text-decoration:none;font-weight:400;letter-spacing:.02em;}
   #pustak-mark-login{color:#243a82;text-decoration:none;font-weight:600;border-left:1px solid #d8c08a;padding-left:10px;}
   #pustak-mark-login:hover{color:#8a210d;}
@@ -41,8 +44,13 @@ function brandingBadge(): string {
 /**
  * Inject the branding badge into an HTML document string. Placed just before
  * </body> when present, otherwise appended. Only call this for text/html.
+ *
+ * The badge invites anonymous visitors to sign in / create an account, so it is
+ * skipped for viewers who are already signed in — they'd have no reason to see
+ * a "Sign in / Create account" prompt.
  */
-export function injectBranding(html: string): string {
+export function injectBranding(html: string, opts: { signedIn?: boolean } = {}): string {
+  if (opts.signedIn) return html // already signed in — no sign-in invite needed
   if (html.includes('data-pustak-branding')) return html // never double-inject
   const badge = brandingBadge()
   const idx = html.toLowerCase().lastIndexOf('</body>')
