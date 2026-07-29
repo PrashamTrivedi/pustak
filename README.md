@@ -62,20 +62,65 @@ curl "$BASE/prash-h-trivedi/explainers/after-automation.html"
 ## MCP server
 
 `POST /mcp` is an OAuth-protected [MCP](https://modelcontextprotocol.io) server
-(Streamable HTTP), implemented as a per-session Durable Object (`McpAgent`). The
-signed-in account flows through to every handler, so writes are attributed to the
+(Streamable HTTP), served **statelessly** — no Durable Object. The signed-in
+account flows through to every handler, so writes are attributed to the
 authenticated user.
 
 - **Tools:** `whoami`, `list_pages`, `read_page`, `write_page`, `delete_page`
-  (writes/deletes are ownership-checked).
+  (writes/deletes are ownership-checked), plus `get_explainer_prompt`.
 - **Resources:** `pustak://about`, `pustak://pages` (JSON catalogue), and the
   template `pustak://page/{+path}` (a single page's content).
-- **Prompt:** `explainer` — currently a placeholder; fill in
-  `src/explainer.ts` (`EXPLAINER_PROMPT_TEXT`) and it's picked up automatically.
+- **Prompt:** `explainer` — the body lives in `src/explainer.ts`
+  (`EXPLAINER_PROMPT_TEXT`) and is picked up automatically.
 
 Point an MCP client at `https://pustak.prashamhtrivedi.app/mcp`. It will discover
 the authorization server, register itself (Dynamic Client Registration), send you
 through the email + OTP login, and connect — no manual client setup.
+
+### Protocol revisions
+
+`src/mcp.ts` exports a *factory* that `createMcpHandler` (from `agents/mcp/server`)
+calls once per request. Both generations are served on the same URL:
+
+- **2026-07-28** — the current revision. It drops the `initialize` handshake and
+  `Mcp-Session-Id` entirely, which is what makes the stateless handler possible.
+- **2025-era clients** are served by the built-in legacy compatibility lane
+  (`legacy: "stateless"`, the default), so existing connections keep working.
+
+This replaced the previous per-session `McpAgent` Durable Object, which is now
+deprecated and feature-frozen upstream and is pinned to MCP SDK v1. Pustak never
+kept session state — only the OAuth props and R2 — so nothing was lost; the
+`PustakMCP` class is deleted by the `v2` migration in `wrangler.jsonc`.
+
+### Confirmation before destructive writes
+
+`write_page` replaces an existing page and `delete_page` is irreversible (R2 keeps
+no version history), so both confirm first, adapting to what the caller supports:
+
+- On 2026-07-28, via **elicitation** — the tool returns an `input_required`
+  result and the client re-issues the call carrying the answer. Nothing is held
+  open server-side. A declined prompt cancels; it is never re-asked.
+- On 2025-era clients, which have no return path for server-initiated requests,
+  it degrades to an explicit `confirm: true` argument.
+
+Both paths fail closed, and every tool also carries `annotations`
+(`readOnlyHint` / `destructiveHint` / `idempotentHint`) that clients use to decide
+what to auto-run — these work on every client and every revision.
+
+### A note on client capabilities
+
+MCP has **no capability for resources or prompts**: `ClientCapabilities` is
+`{experimental, sampling, elicitation, roots, tasks, extensions}`, and prompts and
+resources are *server* capabilities that a client may ignore silently. So a server
+cannot ask whether they will be surfaced.
+
+That matters because tools-only clients (ChatGPT, Windsurf, n8n) never call
+`prompts/list`. `pustak://pages` and `pustak://page/{+path}` are already mirrored
+by `list_pages` / `read_page`, so the only unreachable feature was the explainer —
+hence `get_explainer_prompt`, which exposes the same text as a tool. It is
+registered unconditionally; `src/mcp.ts` explains why narrowing it to just the
+clients that need it isn't achievable. MCP Apps (the `io.modelcontextprotocol/ui`
+extension) is not implemented — Pustak serves pages over plain HTTP instead.
 
 ## Authentication
 
@@ -149,7 +194,7 @@ plugin set changes.
 ```bash
 cp .dev.vars.example .dev.vars                 # set BETTER_AUTH_SECRET; BETTER_AUTH_URL=http://localhost:<port>
 npx wrangler d1 migrations apply pustak-auth --local
-npm run dev                                     # R2 + KV + D1 + Durable Objects simulated locally
+npm run dev                                     # R2 + KV + D1 simulated locally
 ```
 
 Locally, set `BETTER_AUTH_URL` to your `http://localhost:<port>` so the session
@@ -163,7 +208,7 @@ is ever logged).
 ## Project layout
 
 - `src/index.ts` — wires the OAuth provider to the MCP API handler and the default (login + pages) handler.
-- `src/mcp.ts` — the MCP server (`PustakMCP` Durable Object): slug-scoped tools, resources, prompt.
+- `src/mcp.ts` — the MCP server factory: slug-scoped tools, resources, prompt.
 - `src/betterAuth.ts` — the Better Auth instance (D1 + email-OTP identity layer).
 - `src/auth.ts` — `/authorize`, `/_login`, `/_choose-username`, `/logout`, the OTP flow + OAuth bridge.
 - `src/session.ts` — browser session helpers (set/read/clear the Better Auth cookie).
@@ -175,5 +220,5 @@ is ever logged).
 - `src/login-ui.ts` / `src/ui.ts` — the branded login screens and the session-based dashboard.
 - `src/explainer.ts` — the `explainer` prompt body (fill this in).
 - `migrations/` — Better Auth D1 schema + username column; `scripts/auth-gen.ts` regenerates the base schema.
-- `wrangler.jsonc` — Worker config: R2, KV, D1, the `PustakMCP` Durable Object, service binding, vars.
+- `wrangler.jsonc` — Worker config: R2, KV, D1, service binding, vars.
 - `.dev.vars.example` — template for local secrets.

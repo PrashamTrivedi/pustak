@@ -33,19 +33,19 @@
       "migrations_dir": "migrations"
     }
   ],
-  // The MCP server runs as a per-session Durable Object (McpAgent).
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "PustakMCP",
-        "class_name": "PustakMCP"
-      }
-    ]
-  },
+  // The MCP server used to run as a per-session Durable Object (McpAgent). The
+  // 2026-07-28 protocol drops the session handshake, so /mcp is now served by a
+  // stateless handler and the Durable Object is retired — v2 deletes the class
+  // and its stored sessions. Keep both tags: migrations are applied in order and
+  // v1 must stay for deployments that never ran it.
   "migrations": [
     {
       "tag": "v1",
       "new_sqlite_classes": ["PustakMCP"]
+    },
+    {
+      "tag": "v2",
+      "deleted_classes": ["PustakMCP"]
     }
   ],
   // OTP email is delivered by our own cfEmailSender Worker (mail.prashamhtrivedi.app)
