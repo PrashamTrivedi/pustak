@@ -67,7 +67,7 @@ account flows through to every handler, so writes are attributed to the
 authenticated user.
 
 - **Tools:** `whoami`, `list_pages`, `read_page`, `write_page`, `delete_page`
-  (writes/deletes are ownership-checked), plus `get_explainer_prompt`.
+  (writes/deletes are ownership-checked).
 - **Resources:** `pustak://about`, `pustak://pages` (JSON catalogue), and the
   template `pustak://page/{+path}` (a single page's content).
 - **Prompt:** `explainer` — the body lives in `src/explainer.ts`
@@ -107,20 +107,38 @@ Both paths fail closed, and every tool also carries `annotations`
 (`readOnlyHint` / `destructiveHint` / `idempotentHint`) that clients use to decide
 what to auto-run — these work on every client and every revision.
 
-### A note on client capabilities
+### Tools-only clients
 
-MCP has **no capability for resources or prompts**: `ClientCapabilities` is
-`{experimental, sampling, elicitation, roots, tasks, extensions}`, and prompts and
-resources are *server* capabilities that a client may ignore silently. So a server
-cannot ask whether they will be surfaced.
+Some clients (ChatGPT, Windsurf, n8n) only ever use tools — they never call
+`prompts/list`. For those, connect to:
 
-That matters because tools-only clients (ChatGPT, Windsurf, n8n) never call
-`prompts/list`. `pustak://pages` and `pustak://page/{+path}` are already mirrored
-by `list_pages` / `read_page`, so the only unreachable feature was the explainer —
-hence `get_explainer_prompt`, which exposes the same text as a tool. It is
-registered unconditionally; `src/mcp.ts` explains why narrowing it to just the
-clients that need it isn't achievable. MCP Apps (the `io.modelcontextprotocol/ui`
-extension) is not implemented — Pustak serves pages over plain HTTP instead.
+```
+https://pustak.prashamhtrivedi.app/mcp?compat=tools-only
+```
+
+which adds a `get_explainer_prompt` tool returning the same text as the
+`explainer` prompt. Everything else is already reachable without it:
+`pustak://pages` and `pustak://page/{+path}` are mirrored by `list_pages` /
+`read_page`, so the explainer was the only feature such clients couldn't see.
+
+**Why opt-in rather than automatic.** The mirror is the weaker affordance, not a
+free extra. A prompt is invoked by the *user*; a tool is invoked by the *model* —
+so registering it lets the model pull ~2.5k tokens of directive text into context
+on its own initiative, competing with the prompt a capable client already offers
+on the correct path. Serving it to everyone would degrade the good path to carry
+the fallback.
+
+It can't be detected, either. MCP has **no capability for resources or prompts**:
+`ClientCapabilities` is `{experimental, sampling, elicitation, roots, tasks,
+extensions}`, and both are *server* capabilities a client may ignore in silence.
+The client's self-reported name — the only discriminator that exists — isn't
+readable while the tool list is being built: on 2026-07-28 it arrives with the
+dispatched request (too late, and the body is stream-locked), and the 2025-era
+lane carries no identity at all. The URL is the one signal available before any of
+that, in both eras, with no guessing.
+
+MCP Apps (the `io.modelcontextprotocol/ui` extension) is not implemented — Pustak
+serves pages over plain HTTP instead.
 
 ## Authentication
 
