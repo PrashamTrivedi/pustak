@@ -2,7 +2,6 @@
 // `createMcpHandler` (agents/mcp/server) on top of MCP SDK v2. The authenticated
 // user arrives as OAuth props, read via `getMcpAuthContext()`. It offers:
 //   • tools     — whoami, list_pages, read_page, write_page, delete_page
-//                 (+ get_explainer_prompt, only on an opt-in URL — see below)
 //   • resources — pustak://about, pustak://pages, pustak://page/{path}
 //   • prompt    — explainer (body in src/explainer.ts)
 //
@@ -23,34 +22,6 @@ import { EXPLAINER_PROMPT_TEXT } from './explainer'
 const DEFAULT_CONTENT_TYPE = 'text/html; charset=utf-8'
 
 const env = workerEnv as Bindings
-
-/**
- * Whether this connection asked for prompts to be mirrored as tools, via
- * `/mcp?compat=tools-only`.
- *
- * Read from the request URL rather than inferred, because inference is not
- * available where it would be needed: there is no client capability for prompts
- * or resources (`ClientCapabilities` is
- * `{experimental, sampling, elicitation, roots, tasks, extensions}` — both are
- * *server* capabilities a client may ignore in silence), and the client's
- * self-reported name — the only discriminator that exists anywhere — cannot be
- * read while the tool list is being built. On 2026-07-28 it arrives with the
- * dispatched request, by which point the list is fixed and the body is
- * stream-locked; on the 2025-era lane it is absent entirely, since each request
- * is served with no memory of `initialize`.
- *
- * The URL is the one signal available before any of that, in both eras, with no
- * guessing: whoever configures the client states the fact.
- */
-function wantsPromptsAsTools(ctx: McpRequestContext): boolean {
-  const url = ctx.requestInfo?.url
-  if (!url) return false
-  try {
-    return new URL(url).searchParams.get('compat') === 'tools-only'
-  } catch {
-    return false
-  }
-}
 
 /** Resolve a user-supplied, slug-relative path to a full R2 key under their slug. */
 function keyFor(username: string, path: string): string {
@@ -311,33 +282,16 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
   // --- Prompt ------------------------------------------------------------------
   // "explainer" — turns a concept/article/book into a standalone interactive
   // HTML explainer (body lives in src/explainer.ts).
-  const explainerDescription = 'Turn a concept, article, or book into a standalone, interactive HTML explainer page.'
-  server.registerPrompt('explainer', { title: 'Explainer', description: explainerDescription }, () => ({
-    messages: [{ role: 'user' as const, content: { type: 'text' as const, text: EXPLAINER_PROMPT_TEXT } }],
-  }))
+  server.registerPrompt(
+    'explainer',
+    { title: 'Explainer', description: 'Turn a concept, article, or book into a standalone, interactive HTML explainer page.' },
+    () => ({ messages: [{ role: 'user' as const, content: { type: 'text' as const, text: EXPLAINER_PROMPT_TEXT } }] }),
+  )
 
-  // Tools-only clients (ChatGPT, Windsurf, n8n) never call prompts/list, and the
-  // explainer is the one thing Pustak offers that isn't already reachable as a
-  // tool — pustak://pages and pustak://page/{path} are mirrored by list_pages /
-  // read_page. So on `?compat=tools-only` we expose the same text as a tool.
-  //
-  // Off by default, and deliberately so: the mirror is the weaker affordance, not
-  // a free extra. A prompt is invoked by the user; a tool is invoked by the model.
-  // Registering it lets the model pull ~2.5k tokens of directive text into context
-  // on its own initiative, competing with the prompt a capable client already
-  // offers on the correct, user-triggered path. Carrying the fallback everywhere
-  // would degrade the good path to serve the degraded one.
-  if (wantsPromptsAsTools(ctx)) {
-    server.registerTool(
-      'get_explainer_prompt',
-      {
-        title: 'Get explainer prompt',
-        description: `${explainerDescription} Returns the prompt text to follow. Call this only when the user asks for an explainer — it returns a long instruction block, not a summary.`,
-        annotations: { readOnlyHint: true, openWorldHint: false },
-      },
-      async () => textResult(EXPLAINER_PROMPT_TEXT),
-    )
-  }
+  // The explainer is deliberately NOT also mirrored as a tool for clients that
+  // ignore prompts. One URL serves everyone, and a client that doesn't implement
+  // prompts or resources simply doesn't see them — see README "One URL, no
+  // client sniffing" for why that beats the alternatives.
 
   return server
 }

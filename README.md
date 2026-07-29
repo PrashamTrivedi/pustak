@@ -107,35 +107,38 @@ Both paths fail closed, and every tool also carries `annotations`
 (`readOnlyHint` / `destructiveHint` / `idempotentHint`) that clients use to decide
 what to auto-run — these work on every client and every revision.
 
-### Tools-only clients
+### One URL, no client sniffing
 
-Some clients (ChatGPT, Windsurf, n8n) only ever use tools — they never call
-`prompts/list`. For those, connect to:
+There is exactly one endpoint — `/mcp` — and every client gets the same tools,
+resources and prompt. Clients that don't implement resources or prompts (ChatGPT,
+Windsurf, n8n) simply don't see those; nothing is mirrored into a tool to
+compensate. That is a deliberate choice, for two reasons.
 
-```
-https://pustak.prashamhtrivedi.app/mcp?compat=tools-only
-```
-
-which adds a `get_explainer_prompt` tool returning the same text as the
-`explainer` prompt. Everything else is already reachable without it:
-`pustak://pages` and `pustak://page/{+path}` are mirrored by `list_pages` /
-`read_page`, so the explainer was the only feature such clients couldn't see.
-
-**Why opt-in rather than automatic.** The mirror is the weaker affordance, not a
-free extra. A prompt is invoked by the *user*; a tool is invoked by the *model* —
-so registering it lets the model pull ~2.5k tokens of directive text into context
-on its own initiative, competing with the prompt a capable client already offers
-on the correct path. Serving it to everyone would degrade the good path to carry
-the fallback.
-
-It can't be detected, either. MCP has **no capability for resources or prompts**:
+**It can't be detected.** MCP has **no capability for resources or prompts**:
 `ClientCapabilities` is `{experimental, sampling, elicitation, roots, tasks,
 extensions}`, and both are *server* capabilities a client may ignore in silence.
-The client's self-reported name — the only discriminator that exists — isn't
-readable while the tool list is being built: on 2026-07-28 it arrives with the
-dispatched request (too late, and the body is stream-locked), and the 2025-era
-lane carries no identity at all. The URL is the one signal available before any of
-that, in both eras, with no guessing.
+The client's self-reported name — the only discriminator that exists anywhere —
+isn't readable while the tool list is being built: on 2026-07-28 it arrives with
+the dispatched request (too late, and the body is stream-locked by then), and the
+2025-era lane carries no identity at all, since each request is served with no
+memory of `initialize`.
+
+**And the workarounds are worse than the gap.** A second "tools-only" URL pushes
+the problem onto the person adding the connector, who has no way of knowing what
+their client supports — the answer isn't in any UI, and it differs across the
+agents one person uses. Mirroring the prompt as a tool for everyone is worse
+still: a prompt is invoked by the *user*, a tool by the *model*, so the mirror
+would let the model pull ~2.5k tokens of directive text into context unbidden,
+competing with the prompt a capable client already offers on the correct path.
+
+So the surface stays honest: prompts are prompts, resources are resources, and a
+client that ignores them is leaving its own capability on the table. Note that
+`pustak://pages` and `pustak://page/{+path}` are already covered by `list_pages` /
+`read_page` anyway, so what's actually lost is just the `explainer` prompt.
+
+This may become detectable later: on 2026-07-28 client identity rides every
+request, so once clients move off the 2025-era lane a server can adapt per request
+without a second URL.
 
 MCP Apps (the `io.modelcontextprotocol/ui` extension) is not implemented — Pustak
 serves pages over plain HTTP instead.
