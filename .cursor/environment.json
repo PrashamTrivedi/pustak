@@ -1,0 +1,15 @@
+{
+  // Cursor Cloud Agent environment (https://cursor.com/docs/cloud-agent/setup)
+  // Runtime: npm. Bun is installed in `install` when this repo uses it.
+  // Secrets cannot live in this file — add names below in the Cursor dashboard Secrets tab.
+  // BETTER_AUTH_SECRET, BETTER_AUTH_URL, OTP_DEV_ECHO, EMAIL_API_KEY
+  "name": "pustak",
+  "install": "npm ci || npm install",
+  "start": "npm run dev",
+  "ports": [
+    {
+      "name": "worker",
+      "port": 8787
+    }
+  ]
+}
