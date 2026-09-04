@@ -8,8 +8,8 @@
     "dockerfile": "Dockerfile",
     "context": ".."
   },
-  "install": "/opt/prasham-cursor/bin/materialize-cursor-harness.sh && (npm ci || npm install)",
-  "start": "npm run dev",
+  "install": "/opt/prasham-cursor/bin/materialize-cursor-harness.sh && mkdir -p .cursor && ln -sfn /opt/prasham-cursor/commands .cursor/commands && (npm ci || npm install)",
+  "start": "mkdir -p .cursor && ln -sfn /opt/prasham-cursor/commands .cursor/commands && npm run dev",
   "ports": [
     {
       "name": "worker",
