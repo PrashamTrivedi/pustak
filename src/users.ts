@@ -9,6 +9,7 @@ const RESERVED_SLUGS = new Set([
   '_login', '_browse', '_docs', '_list', '_openapi.json', '_choose-username',
   'authorize', 'login', 'logout', 'token', 'register', 'api', 'mcp',
   '.well-known', 'favicon.ico', 'robots.txt', 'index.html', 'admin', 'static',
+  '_og.png',
 ])
 
 /** Slugs: 2–32 chars, lowercase alphanumeric + internal hyphens, no leading _. */
@@ -30,6 +31,19 @@ export function slugifyEmail(email: string): string {
 export async function getUsername(env: Bindings, userId: string): Promise<string | null> {
   const row = await env.DB.prepare('SELECT username FROM user WHERE id = ?').bind(userId).first<{ username: string | null }>()
   return row?.username ?? null
+}
+
+export type PublicUser = { id: string; email: string; name: string; username: string }
+
+/** Resolve a claimed slug to its user, or null if nobody owns it. */
+export async function getUserByUsername(env: Bindings, slug: string): Promise<PublicUser | null> {
+  return (
+    (await env.DB.prepare(
+      'SELECT id, email, name, username FROM user WHERE username = ?',
+    )
+      .bind(slug)
+      .first<PublicUser>()) ?? null
+  )
 }
 
 export async function getUsernameByEmail(env: Bindings, email: string): Promise<string | null> {
