@@ -42,7 +42,15 @@ export function htmlHasOgTitle(html: string): boolean {
 export function injectOgIfMissing(html: string, meta: SocialMeta): string {
   if (htmlHasOgTitle(html)) return html
   const block = socialMetaTags(meta)
-  const head = html.toLowerCase().indexOf('</head>')
-  if (head === -1) return html
-  return html.slice(0, head) + block + html.slice(head)
+  const lower = html.toLowerCase()
+  const headEnd = lower.indexOf('</head>')
+  if (headEnd !== -1) return html.slice(0, headEnd) + block + html.slice(headEnd)
+  const htmlOpen = lower.indexOf('<html')
+  if (htmlOpen !== -1) {
+    const tagEnd = html.indexOf('>', htmlOpen)
+    if (tagEnd !== -1) {
+      return html.slice(0, tagEnd + 1) + `<head>${block}</head>` + html.slice(tagEnd + 1)
+    }
+  }
+  return `<head>${block}</head>` + html
 }
