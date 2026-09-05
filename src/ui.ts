@@ -657,7 +657,8 @@ export function openApiSpec(origin: string) {
               in: 'query',
               required: false,
               schema: { type: 'string', enum: ['public', 'unlisted', 'private'] },
-              description: 'Stored visibility. Defaults to unlisted (anyone with the link can open it; it is not protected). Also accepted as header X-Pustak-Visibility.',
+              description:
+                'Stored visibility when stated. Omit on create → unlisted. Omit on replace → keep the current visibility. Also accepted as header X-Pustak-Visibility.',
             },
           ],
           requestBody: {

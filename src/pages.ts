@@ -13,11 +13,11 @@ import { notFoundResponse } from './notfound'
 import { injectOgIfMissing, socialImageUrl } from './meta'
 import { OG_IMAGE_PATH } from './theme'
 import {
-  DEFAULT_VISIBILITY,
   isVisibility,
   readVisibility,
   rewriteVisibility,
   robotsHeaderFor,
+  visibilityForWrite,
   type Visibility,
 } from './visibility'
 import { OG_PNG } from './og-png'
@@ -77,11 +77,12 @@ function legacyRedirect(key: string): string | null {
   return null
 }
 
-function visibilityFromRequest(c: AppCtx): Visibility | { error: Response } {
+/** Stated visibility from query/header, or undefined when the caller omitted it. */
+function visibilityFromRequest(c: AppCtx): Visibility | undefined | { error: Response } {
   const header = c.req.header('x-pustak-visibility')
   const query = c.req.query('visibility')
   const raw = header || query
-  if (raw === undefined || raw === '') return DEFAULT_VISIBILITY
+  if (raw === undefined || raw === '') return undefined
   if (!isVisibility(raw)) {
     return { error: c.json({ error: 'Invalid visibility', visibility: raw }, 400) }
   }
@@ -160,10 +161,11 @@ export function registerPageRoutes(app: Hono<{ Bindings: Bindings }>) {
     if (firstSegment(key) !== session.username) {
       return c.json({ error: 'Forbidden: write under your own username, e.g. /' + session.username + '/<path>' }, 403)
     }
-    const vis = visibilityFromRequest(c)
-    if (typeof vis !== 'string') return vis.error
+    const stated = visibilityFromRequest(c)
+    if (stated && typeof stated !== 'string') return stated.error
     const body = await c.req.arrayBuffer()
     if (body.byteLength === 0) return c.json({ error: 'Empty body. Send the page content as the request body.' }, 400)
+    const vis = await visibilityForWrite(c.env.BUCKET, key, stated)
     const contentType = c.req.header('content-type') || DEFAULT_CONTENT_TYPE
     await c.env.BUCKET.put(key, body, {
       httpMetadata: { contentType },

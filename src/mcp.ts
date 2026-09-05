@@ -10,13 +10,7 @@ import { z } from 'zod'
 import type { Bindings, Props } from './types'
 import { toKey } from './pages'
 import { EXPLAINER_PROMPT_TEXT } from './explainer'
-import {
-  DEFAULT_VISIBILITY,
-  isVisibility,
-  readVisibility,
-  rewriteVisibility,
-  type Visibility,
-} from './visibility'
+import { isVisibility, readVisibility, rewriteVisibility, visibilityForWrite, type Visibility } from './visibility'
 
 const DEFAULT_CONTENT_TYPE = 'text/html; charset=utf-8'
 
@@ -108,7 +102,7 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
         description:
           'Create or replace a page in your space. Served at /<username>/<path>. ' +
           'Optional visibility: public (listed on your profile, indexable), unlisted (anyone with the link can open it; not protected; not on your profile), or private (owner only). ' +
-          'If omitted, the page is unlisted.',
+          'If omitted on a new page, it is unlisted. If omitted when replacing an existing page, the current visibility is kept.',
         inputSchema: {
           path: z.string().describe('Slug-relative path, e.g. "explainers/intro".'),
           content: z.string().describe('The page body (usually HTML).'),
@@ -116,13 +110,15 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
           visibility: z
             .enum(['public', 'unlisted', 'private'])
             .optional()
-            .describe('Page visibility. Defaults to unlisted — anyone with the link can open it; it is not protected.'),
+            .describe(
+              'Page visibility. Omit to keep the existing state, or unlisted for a new page — anyone with the link can open unlisted pages; they are not protected.',
+            ),
         },
       },
       async ({ path, content, contentType, visibility }) => {
         if (!this.username) return { isError: true, content: [{ type: 'text', text: 'No username on this account.' }] }
-        const vis: Visibility = visibility ?? DEFAULT_VISIBILITY
         const key = this.key(path)
+        const vis: Visibility = await visibilityForWrite(this.env.BUCKET, key, visibility)
         await this.env.BUCKET.put(key, content, {
           httpMetadata: { contentType: contentType || DEFAULT_CONTENT_TYPE },
           customMetadata: { owner: this.email, visibility: vis },

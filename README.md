@@ -24,9 +24,10 @@ On top of the page store, Pustak ships:
 
 ## Visibility
 
-Every page has one of three states. The default for new pages (dashboard, `PUT`,
-and MCP `write_page`) is **Unlisted**. Existing pages with no stored value are
-unlisted too.
+Every page has one of three states. A **new** page with no stated visibility
+(dashboard, `PUT`, MCP `write_page`) is **Unlisted**. Replacing a page without
+stating visibility keeps the current state — it does not demote public or
+private pages. Existing objects with no stored value are unlisted too.
 
 | State | Stranger can open the URL? | On the profile? | Search engines |
 | --- | --- | --- | --- |
@@ -93,7 +94,8 @@ authenticated user.
 
 - **Tools:** `whoami`, `list_pages`, `read_page`, `write_page`, `delete_page`,
   `set_visibility` (writes/deletes/visibility are ownership-checked).
-  `write_page` accepts an optional `visibility` and defaults to **unlisted**.
+  `write_page` accepts an optional `visibility` (new pages default to **unlisted**;
+  overwrites keep the current state unless visibility is stated).
 - **Resources:** `pustak://about`, `pustak://pages` (JSON catalogue), and the
   template `pustak://page/{+path}` (a single page's content).
 - **Prompt:** `explainer` — currently a placeholder; fill in

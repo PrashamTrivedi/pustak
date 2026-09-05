@@ -23,11 +23,28 @@ export function robotsHeaderFor(v: Visibility): string | undefined {
 
 export type R2Like = {
   get(key: string): Promise<R2ObjectBody | null>
+  head(key: string): Promise<R2Object | null>
   put(
     key: string,
     value: ArrayBuffer | ArrayBufferView | string | ReadableStream,
     options?: R2PutOptions,
   ): Promise<R2Object>
+}
+
+/**
+ * Visibility for a create/replace write. An explicit value always wins.
+ * If the caller omitted it, keep the existing object's state; only brand-new
+ * keys get DEFAULT_VISIBILITY (unlisted).
+ */
+export async function visibilityForWrite(
+  bucket: Pick<R2Like, 'head'>,
+  key: string,
+  stated: Visibility | undefined,
+): Promise<Visibility> {
+  if (stated) return stated
+  const existing = await bucket.head(key)
+  if (!existing) return DEFAULT_VISIBILITY
+  return readVisibility(existing.customMetadata)
 }
 
 /**
