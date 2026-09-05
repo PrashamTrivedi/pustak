@@ -26,6 +26,7 @@ Session: `probe@example.com` → slug `probe-user`.
 - `PATCH` to private; anonymous body of private page **diff-identical** to a never-written path; same 404 headers (`content-type`, `cache-control`, `x-robots-tag`).
 - Owner GET private → 200 + noindex.
 - `PUT` `style.css` as `text/css`, `PATCH` to public → `Content-Type: text/css`, no robots header.
+- Overwrite of a public/private page with no stated visibility keeps that state (`listed.html` stayed public, `probe.html` stayed private). A new page with no stated visibility is still unlisted. An explicit `?visibility=` on PUT still wins.
 - Invalid visibility `banana` → 400. Cross-user PATCH → 403.
 
 ## Profile / embed / meta
