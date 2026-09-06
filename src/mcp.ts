@@ -10,6 +10,7 @@ import { z } from 'zod'
 import type { Bindings, Props } from './types'
 import { toKey } from './pages'
 import { EXPLAINER_PROMPT_TEXT } from './explainer'
+import { isVisibility, readVisibility, rewriteVisibility, visibilityForWrite, type Visibility } from './visibility'
 
 const DEFAULT_CONTENT_TYPE = 'text/html; charset=utf-8'
 
@@ -60,12 +61,17 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
         if (!this.hasSlug) return this.noSlug()
         const base = this.username + '/'
         const full = base + (prefix ? String(prefix).replace(/^\/+/, '') : '')
-        const pages: { path: string; size: number; uploaded: string }[] = []
+        const pages: { path: string; size: number; uploaded: string; visibility: Visibility }[] = []
         let cursor: string | undefined
         do {
-          const listing = await this.env.BUCKET.list({ prefix: full, cursor })
+          const listing = await this.env.BUCKET.list({ prefix: full, cursor, include: ['customMetadata'] })
           for (const o of listing.objects) {
-            pages.push({ path: o.key.slice(base.length), size: o.size, uploaded: o.uploaded.toISOString() })
+            pages.push({
+              path: o.key.slice(base.length),
+              size: o.size,
+              uploaded: o.uploaded.toISOString(),
+              visibility: readVisibility(o.customMetadata),
+            })
           }
           cursor = listing.truncated ? listing.cursor : undefined
         } while (cursor)
@@ -93,21 +99,31 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
       'write_page',
       {
         title: 'Write page',
-        description: 'Create or replace a page in your space. Served at /<username>/<path>.',
+        description:
+          'Create or replace a page in your space. Served at /<username>/<path>. ' +
+          'Optional visibility: public (listed on your profile, indexable), unlisted (anyone with the link can open it; not protected; not on your profile), or private (owner only). ' +
+          'If omitted on a new page, it is unlisted. If omitted when replacing an existing page, the current visibility is kept.',
         inputSchema: {
           path: z.string().describe('Slug-relative path, e.g. "explainers/intro".'),
           content: z.string().describe('The page body (usually HTML).'),
           contentType: z.string().optional().describe('MIME type. Defaults to text/html.'),
+          visibility: z
+            .enum(['public', 'unlisted', 'private'])
+            .optional()
+            .describe(
+              'Page visibility. Omit to keep the existing state, or unlisted for a new page — anyone with the link can open unlisted pages; they are not protected.',
+            ),
         },
       },
-      async ({ path, content, contentType }) => {
-        if (!this.username) return { isError: true, content: [{ type: 'text', text: 'No username on this account.' }] }
+      async ({ path, content, contentType, visibility }) => {
+        if (!this.hasSlug) return this.noSlug()
         const key = this.key(path)
+        const vis: Visibility = await visibilityForWrite(this.env.BUCKET, key, visibility)
         await this.env.BUCKET.put(key, content, {
           httpMetadata: { contentType: contentType || DEFAULT_CONTENT_TYPE },
-          customMetadata: { owner: this.email },
+          customMetadata: { owner: this.email, visibility: vis },
         })
-        return { content: [{ type: 'text', text: `Saved /${key} (${content.length} bytes).` }] }
+        return { content: [{ type: 'text', text: `Saved /${key} (${content.length} bytes, ${vis}).` }] }
       },
     )
 
@@ -128,6 +144,30 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
       },
     )
 
+    server.registerTool(
+      'set_visibility',
+      {
+        title: 'Set visibility',
+        description:
+          'Change the visibility of one of your pages. Unlisted means anyone holding the link can open it; it is not protected. ' +
+          'Public lists the page on your profile and may be indexed. Private is owner-only.',
+        inputSchema: {
+          path: z.string().describe('Slug-relative path, e.g. "explainers/intro".'),
+          visibility: z.enum(['public', 'unlisted', 'private']).describe('New visibility.'),
+        },
+      },
+      async ({ path, visibility }) => {
+        if (!this.hasSlug) return this.noSlug()
+        if (!isVisibility(visibility)) {
+          return { isError: true, content: [{ type: 'text' as const, text: 'Invalid visibility.' }] }
+        }
+        const key = this.key(path)
+        const result = await rewriteVisibility(this.env.BUCKET, key, visibility)
+        if (result === 'missing') return { isError: true, content: [{ type: 'text', text: `Not found: /${key}` }] }
+        return { content: [{ type: 'text', text: `Set /${key} to ${visibility}.` }] }
+      },
+    )
+
     // --- Resources -----------------------------------------------------------
     server.registerResource(
       'about',
@@ -139,8 +179,9 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
             uri: uri.href,
             text:
               'Pustak stores standalone HTML pages in Cloudflare R2 and serves them from the edge. ' +
-              'Each user\'s pages live under their username slug (/<username>/...). Reads are public; ' +
-              `writes are authenticated. You are ${this.email} (@${this.username}).`,
+              'Each user\'s pages live under their username slug (/<username>/...). ' +
+              'Each page is public (listed on the profile, indexable), unlisted (anyone with the link can open it; not protected; not listed), or private (owner only). ' +
+              `Writes are authenticated. You are ${this.email} (@${this.username}).`,
           },
         ],
       }),
@@ -152,11 +193,13 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
       { title: 'Your pages', description: 'JSON index of the pages in your space.', mimeType: 'application/json' },
       async (uri) => {
         const base = this.username + '/'
-        const pages: { path: string; size: number }[] = []
+        const pages: { path: string; size: number; visibility: Visibility }[] = []
         let cursor: string | undefined
         do {
-          const listing = await this.env.BUCKET.list({ prefix: base, cursor })
-          for (const o of listing.objects) pages.push({ path: o.key.slice(base.length), size: o.size })
+          const listing = await this.env.BUCKET.list({ prefix: base, cursor, include: ['customMetadata'] })
+          for (const o of listing.objects) {
+            pages.push({ path: o.key.slice(base.length), size: o.size, visibility: readVisibility(o.customMetadata) })
+          }
           cursor = listing.truncated ? listing.cursor : undefined
         } while (cursor)
         return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify({ count: pages.length, username: this.username, pages }, null, 2) }] }

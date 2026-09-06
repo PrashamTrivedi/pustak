@@ -42,7 +42,8 @@ function brandingBadge(): string {
  * Inject the branding badge into an HTML document string. Placed just before
  * </body> when present, otherwise appended. Only call this for text/html.
  */
-export function injectBranding(html: string): string {
+export function injectBranding(html: string, opts?: { embed?: boolean }): string {
+  if (opts?.embed) return html
   if (html.includes('data-pustak-branding')) return html // never double-inject
   const badge = brandingBadge()
   const idx = html.toLowerCase().lastIndexOf('</body>')

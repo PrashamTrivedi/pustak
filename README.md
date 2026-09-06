@@ -5,13 +5,15 @@ Built with [Hono](https://hono.dev). Live at **https://pustak.prashamhtrivedi.ap
 
 Each user signs in (passwordless email + OTP) and picks a unique **username
 slug**. Their pages live under that slug as the first path segment — `PUT
-/<username>/docs/intro` stores a page served publicly at
+/<username>/docs/intro` stores a page served at
 `GET /<username>/docs/intro`.
 
 On top of the page store, Pustak ships:
 
 - **Accounts + a signed-in dashboard** — the homepage is the bucket browser for
-  your own pages; anonymous visitors are redirected to login. No API token.
+  your own pages; signed-out visitors see a landing page with live proof. No API token.
+- **Profiles** at `/<username>` listing the pages the owner has made **public**.
+- **Three-state visibility** on every page: public, unlisted, or private.
 - **A remote MCP server** at `/mcp` (Streamable HTTP) exposing tools, resources
   and an `explainer` prompt — see [MCP server](#mcp-server).
 - **OAuth 2.1 with passwordless email + OTP login** — MCP clients (e.g. Claude)
@@ -20,19 +22,43 @@ On top of the page store, Pustak ships:
   unobtrusive, dismissible mark inviting visitors to sign in / create an account,
   without getting in the way of reading.
 
+## Visibility
+
+Every page has one of three states. A **new** page with no stated visibility
+(dashboard, `PUT`, MCP `write_page`) is **Unlisted**. Replacing a page without
+stating visibility keeps the current state — it does not demote public or
+private pages. Existing objects with no stored value are unlisted too.
+
+| State | Stranger can open the URL? | On the profile? | Search engines |
+| --- | --- | --- | --- |
+| **Public** | Yes | Yes | Indexable |
+| **Unlisted** | Yes — anyone holding the link can open it; it is not protected | No | `X-Robots-Tag: noindex, nofollow` |
+| **Private** | No — owner only (everyone else gets a branded 404 identical to a missing page) | No | `X-Robots-Tag: noindex, nofollow` |
+
+Change visibility with `PATCH /<username>/<path>` (`{"visibility":"public"}`) or
+the MCP `set_visibility` tool. The dashboard confirms before publishing.
+
 ## API
 
-Reads are public. Writes/deletes/listing are authenticated by your **browser
-session** (the same cookie set at login — there is no API token) and scoped to
-your own username slug.
+Reads of **public** and **unlisted** pages need no authentication. **Private**
+pages are owner-only. Writes/deletes/listing/visibility changes are authenticated
+by your **browser session** (the same cookie set at login — there is no API token)
+and scoped to your own username slug.
 
 | Method   | Path                  | Auth | Description                                             |
 | -------- | --------------------- | ---- | ------------------------------------------------------ |
-| `GET`    | `/<username>/<path>`  | —    | Serve a stored page (public). `…/` → `index.html`.     |
-| `PUT`    | `/<username>/<path>`  | 🍪   | Create/replace one of *your* pages. Body = content.    |
+| `GET`    | `/`                   | —    | Landing (signed out) or dashboard (signed in).         |
+| `GET`    | `/<username>`         | —    | Profile (public pages; owners also see the rest).      |
+| `GET`    | `/<username>/<path>`  | —*   | Serve a stored page. `…/` → `index.html`.              |
+| `PUT`    | `/<username>/<path>`  | 🍪   | Create/replace one of *your* pages. Body = content. Optional `?visibility=` or `X-Pustak-Visibility`. |
 | `POST`   | `/<username>/<path>`  | 🍪   | Same as `PUT`.                                         |
+| `PATCH`  | `/<username>/<path>`  | 🍪   | Change visibility (`{"visibility":"public"\|"unlisted"\|"private"}`). |
 | `DELETE` | `/<username>/<path>`  | 🍪   | Delete one of *your* pages.                            |
-| `GET`    | `/_list`              | 🍪   | List *your* pages (paths are slug-relative).           |
+| `GET`    | `/_list`              | 🍪   | List *your* pages (includes `visibility`).             |
+| `GET`    | `/robots.txt`         | —    | Crawler rules.                                         |
+| `GET`    | `/_og.png`            | —    | Social-preview image.                                  |
+
+\* Public and unlisted pages are open; private pages 404 unless you are the owner.
 
 🍪 = requires your login session; you may only write/delete under your own slug
 (cross-slug writes → 403).
@@ -43,8 +69,8 @@ OAuth/auth routes are reserved and cannot be used as slugs or stored as pages.
 
 ## Pages & dashboard
 
-- **`/`** and **`/_browse`** — your signed-in dashboard: list, view, upload and
-  delete your own pages. Redirects to `/_login` when signed out.
+- **`/`** — signed-out landing (proof + sign-in as the second step); signed-in dashboard.
+- **`/_browse`** — the signed-in dashboard. Redirects to `/_login` when signed out.
 - **`/_login`** — passwordless email + OTP sign-in / account creation.
 - **`/_choose-username`** — first-login slug picker.
 - **`/_docs`** / **`/_openapi.json`** — Swagger UI + OpenAPI 3.1 spec (the
@@ -55,7 +81,7 @@ OAuth/auth routes are reserved and cannot be used as slugs or stored as pages.
 ```bash
 BASE=https://pustak.prashamhtrivedi.app
 # Sign in at $BASE/_login in a browser; the session cookie authenticates writes.
-# Public reads need no auth:
+# Unlisted and public pages can be fetched without a session:
 curl "$BASE/prash-h-trivedi/explainers/after-automation.html"
 ```
 
@@ -66,8 +92,10 @@ curl "$BASE/prash-h-trivedi/explainers/after-automation.html"
 signed-in account flows through to every handler, so writes are attributed to the
 authenticated user.
 
-- **Tools:** `whoami`, `list_pages`, `read_page`, `write_page`, `delete_page`
-  (writes/deletes are ownership-checked).
+- **Tools:** `whoami`, `list_pages`, `read_page`, `write_page`, `delete_page`,
+  `set_visibility` (writes/deletes/visibility are ownership-checked).
+  `write_page` accepts an optional `visibility` (new pages default to **unlisted**;
+  overwrites keep the current state unless visibility is stated).
 - **Resources:** `pustak://about`, `pustak://pages` (JSON catalogue), and the
   template `pustak://page/{+path}` (a single page's content).
 - **Prompt:** `explainer` — currently a placeholder; fill in
@@ -170,7 +198,10 @@ is ever logged).
 - `src/users.ts` — username slugs: validation, reserved words, claim via D1.
 - `src/email.ts` — OTP delivery via the cfEmailSender service binding.
 - `src/util.ts` — small shared helpers (email normalisation/validation).
-- `src/pages.ts` — the page store, session-scoped REST API, branded serving, legacy redirects.
+- `src/pages.ts` — the page store, session-scoped REST API, visibility, profiles, landing, branded serving.
+- `src/visibility.ts` — three-state visibility (public / unlisted / private) on R2 metadata.
+- `src/profile.ts` / `src/landing.ts` / `src/notfound.ts` / `src/meta.ts` — public surfaces and social tags.
+- `src/theme.ts` — shared Indic-pothi palette.
 - `src/branding.ts` — the injected Pustak mark for shared pages.
 - `src/login-ui.ts` / `src/ui.ts` — the branded login screens and the session-based dashboard.
 - `src/explainer.ts` — the `explainer` prompt body (fill this in).
