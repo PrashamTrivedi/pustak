@@ -53,6 +53,7 @@ ${THEME_BODY_CSS}
       <strong>@${PROOF_PROFILE_SLUG}</strong>
     </a>
     <p class="second">Then, if you want a space of your own, <a href="/_login">sign in or create an account</a>.</p>
+    <p class="second"><a href="/why">Why this</a> · <a href="/learn">Try a prompt</a> · <a href="/install">Install MCP</a></p>
   </div>
 </body>
 </html>`

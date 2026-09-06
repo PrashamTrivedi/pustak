@@ -1,10 +1,6 @@
-// The "explainer" MCP prompt body.
-//
-// Mirrors the content of the "explainer" skill, adapted for an MCP prompt: the
-// references to the skill's bundled example webpage (examples/bloom-filter.html
-// and its screenshot) are dropped, since that file doesn't ship with the prompt —
-// the proven palette/components are inlined here instead. src/mcp.ts serves this
-// verbatim as the body of the `explainer` prompt.
+// The "explainer" MCP prompt body, served verbatim by src/mcp.ts.
+// Pedagogy and interaction catalog only — no prescribed palette. Forcing a
+// default CSS is how an HTML skill ruins the format (see /why).
 export const EXPLAINER_PROMPT_TEXT = `# Explainer Generator
 
 Take a concept (text the user wants explained, a topic, a paste of docs/code) and produce one self-contained interactive HTML file that teaches it — progressive sections, live demos the reader can poke, diagrams, and callouts. The artifact IS the deliverable; it is meant to be opened and read, not to feed a prompt back to the model.
@@ -20,9 +16,9 @@ The user wants something explained and an interactive page would land it better 
 1. Pin down the one big idea. Before any HTML, write (for yourself) the single sentence the reader should walk away with. Everything serves that sentence. If the input is vague, ask 1-2 clarifying questions (audience level? the specific angle?).
 2. Decompose into 3-6 sections that build on each other: the problem/motivation → the core mechanism → an interactive demo → the knobs/edge cases → recap. Concrete before abstract.
 3. Pick interactions per section from the catalog below. Every meaty idea earns a visual or an interaction, not another paragraph. Reach for at least one thing the reader can manipulate.
-4. Write a single HTML file — inline all CSS/JS, no external dependencies. Use the design system below so it looks good by default.
+4. Write a single HTML file — inline all CSS/JS, no external dependencies. Design it for this topic (see Visual design). Do not reach for a stock palette.
 5. Verify by rendering it and looking (see Verify). A blank or broken page = not done.
-6. Deliver it — save it to the user's space (Pustak's write_page tool serves it at /<username>/<path>) or hand over the file, and tell them where it lives.
+6. Deliver it. If you have Pustak's \`write_page\` tool, save it to the user's space (served at /<username>/<path>). If you don't, write the file locally and tell them to sign in at the Pustak site and upload it from the dashboard — and point them at /install so you can publish next time. Tell them where it lives.
 
 ## Source-grounded inputs: articles & books
 
@@ -47,11 +43,11 @@ Be honest about sourcing: from a bare title you're working from training knowled
 
 Output layout — one self-contained HTML file per page with relative links between them (each file still inlines all its own CSS/JS): a spine/index page plus one page per sliced chapter.
 
-Spine page specifics: centerpiece is an annotated idea-map (inline SVG) showing how the load-bearing ideas connect and build; add a sticky TOC sidebar once past ~6 sections (the only sanctioned departure from pure single-column). When slices exist, each idea/chapter card links to its chapter page.
+Spine page specifics: centerpiece is an annotated idea-map (inline SVG) showing how the load-bearing ideas connect and build; add a sticky TOC sidebar once past ~6 sections (the only sanctioned departure from pure single-column). When slices exist, each idea/chapter card links to its chapter page. Chapters of the same book share one visual language so they read as one work.
 
 Interaction fits for books: timeline for narrative books; claim → evidence → counterargument toggles for argument-driven nonfiction; check-your-understanding quizzes for framework-heavy books — and apply the "operable gotcha" rule at book scale: let the reader trigger the bias/effect the chapter describes, not just read about it.
 
-When slicing more than one chapter, write each chapter as its own full-depth explainer. They share no context, so every chapter page must carry its own scope, key ideas, source excerpts, and the shared design system (reuse one palette across all chapters so they read as one book). Finish by writing the spine/index page that links every chapter — that hub is the entry point you hand the user. Never leave orphan chapter pages.
+When slicing more than one chapter, write each chapter as its own full-depth explainer. They share no context, so every chapter page must carry its own scope, key ideas, source excerpts, and the same visual language (type, color, rhythm) so they read as one book. Finish by writing the spine/index page that links every chapter — that hub is the entry point you hand the user. Never leave orphan chapter pages.
 
 ## Interaction catalog — your toolbox
 
@@ -78,17 +74,17 @@ Don't cram all of these in. Match the concept; cut the rest.
 - Name the gotcha. The thing that surprises people gets its own gotcha callout — ideally one the reader can trigger in a demo (e.g. push a slider past the optimum and watch error rise).
 - Recap at the end — the one sentence again, now that they've earned it.
 
-## Design system (reuse this — it's proven)
+## Visual design
 
-Dark, calm, one accent gradient. System font for UI, monospace for code/values. Build from this palette and these components: a scroll progress bar, a hero, numbered section headings, a .callout (plus .insight / .gotcha, and a neutral-tint .context variant for source-grounded pages), a .term hover tooltip, a .panel, sliders, a .gauge, and stepper styles.
+Do **not** reuse a stock palette, a GitHub-dark theme, or any prescribed "explainer CSS". That is how a slash command ruins HTML — every page looks the same and none of them look like the idea.
 
-    --bg:#0e1117  --bg-elev:#161b22  --border:#2a3240  --text:#e6edf3  --text-dim:#9aa7b4
-    --accent:#58a6ff  --accent2:#a371f7  --good:#3fb950  --bad:#f85149  --warn:#d29922
+Design the page for this topic. Type, color, layout, and motion should come from what is being taught. Two chapters of the same book should match each other; two unrelated explainers should not.
 
-- Single column, max-width ~760px, centered. Reading-first, not dashboard-first.
+- Reading-first. A single column around 760px is a good default, not a law.
 - Live preview means live: every control calls one updateAll() that re-renders. No submit buttons for state changes.
 - Animate state changes (transition / keyframes) so cause → effect is visible, not instant-snap.
-- Self-contained: if a CDN being down breaks it, you did it wrong.
+- Self-contained: inline CSS and JS. No CDNs, no webfonts that require a network. If a CDN being down breaks it, you did it wrong.
+- Callouts still help (insight / gotcha / a neutral context variant for source-grounded fills) — invent their look, don't copy a template.
 
 ## State pattern
 
@@ -112,6 +108,7 @@ Then look at the screenshot. Blank/error/cramped → fix and re-render. For inte
 - Wall of text with a banner on top. If there's nothing to operate and nothing to see, it's a styled README — add a demo or cut it.
 - Static "interactive" page. Controls that don't re-render live, or a demo that only shows one frozen state.
 - External dependencies (Tailwind CDN, charting libs, web fonts). Inline everything; it must work offline forever.
+- A template look. If this page could be swapped onto another topic by changing the title, the design failed.
 - Burying the big idea under setup. Lead with it.
 - Decoration over explanation. Animations and gradients serve comprehension; they're not the point.
 - Claiming done without rendering. You didn't see it → it's not done.

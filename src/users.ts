@@ -3,6 +3,7 @@
 // The slug is stored on the Better Auth `user` row (added in 0002_username.sql)
 // and managed here directly via D1 (Better Auth doesn't need to know about it).
 import type { Bindings } from './types'
+import { SITE_PAGE_SLUGS } from './prompts'
 
 // Top-level path segments the Worker owns — a slug may never collide with these.
 const RESERVED_SLUGS = new Set([
@@ -10,6 +11,7 @@ const RESERVED_SLUGS = new Set([
   'authorize', 'login', 'logout', 'token', 'register', 'api', 'mcp',
   '.well-known', 'favicon.ico', 'robots.txt', 'index.html', 'admin', 'static',
   '_og.png',
+  ...SITE_PAGE_SLUGS,
 ])
 
 /** Slugs: 2–32 chars, lowercase alphanumeric + internal hyphens, no leading _. */

@@ -6,7 +6,7 @@ import { Hono, type Context } from 'hono'
 import { dashboardHtml, SWAGGER_HTML, openApiSpec } from './ui'
 import { injectBranding, isHtmlContentType } from './branding'
 import { getSessionUser } from './session'
-import { getUsername } from './users'
+import { getUsername, isReservedSlug } from './users'
 import { landingHtml } from './landing'
 import { loadProfile, profileHtml } from './profile'
 import { notFoundResponse } from './notfound'
@@ -22,6 +22,8 @@ import {
 } from './visibility'
 import { OG_PNG } from './og-png'
 import type { Bindings } from './types'
+import { SITE_PAGE_SLUGS, sitePageHtml } from './site-pages'
+import { canonicalOrigin } from './prompts'
 
 type AppCtx = Context<{ Bindings: Bindings }>
 
@@ -47,26 +49,10 @@ export function toKey(path: string): string {
 
 const firstSegment = (key: string) => key.split('/')[0]
 
-/** Paths owned by the Worker (admin UI, OAuth, auth) — never stored as pages. */
+/** Paths owned by the Worker (admin UI, OAuth, auth, site pages) — never stored as pages. */
 function isReserved(path: string): boolean {
   const p = path.replace(/^\/+/, '').replace(/\/.*/, '') // first segment
-  return (
-    path === '/_browse' ||
-    path === '/_docs' ||
-    path === '/_openapi.json' ||
-    path === '/_list' ||
-    path === OG_IMAGE_PATH ||
-    path === '/robots.txt' ||
-    p === '_login' ||
-    p === '_choose-username' ||
-    p === 'authorize' ||
-    p === 'login' ||
-    p === 'logout' ||
-    p === 'token' ||
-    p === 'register' ||
-    p === 'api' ||
-    p === '.well-known'
-  )
+  return isReservedSlug(p)
 }
 
 /** A legacy path that should 301 to its new slug-namespaced location, or null. */
@@ -214,6 +200,14 @@ export function registerPageRoutes(app: Hono<{ Bindings: Bindings }>) {
   // Built-in pages.
   app.get('/_docs', (c) => c.html(SWAGGER_HTML))
   app.get('/_openapi.json', (c) => c.json(openApiSpec(new URL(c.req.url).origin)))
+
+  for (const slug of SITE_PAGE_SLUGS) {
+    app.get('/' + slug, (c) => {
+      const origin = canonicalOrigin(c.env.BETTER_AUTH_URL || new URL(c.req.url).origin)
+      return c.html(sitePageHtml(slug, origin))
+    })
+    app.get('/' + slug + '/', (c) => c.redirect('/' + slug))
+  }
 
   // Homepage: landing for strangers, dashboard when signed in. /_browse stays auth-only.
   app.get('/', (c) => home(c))

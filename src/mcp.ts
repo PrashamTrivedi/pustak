@@ -3,7 +3,7 @@
 // user arrives as OAuth props, read via `getMcpAuthContext()`. It offers:
 //   • tools     — whoami, list_pages, read_page, write_page, delete_page, set_visibility
 //   • resources — pustak://about, pustak://pages, pustak://page/{path}
-//   • prompt    — explainer (body in src/explainer.ts)
+//   • prompt    — explainer, learn (bodies in src/explainer.ts / src/prompts.ts)
 //
 // Why a factory rather than the old McpAgent Durable Object: the 2026-07-28
 // protocol revision drops the initialize/Mcp-Session-Id handshake, so a server
@@ -18,6 +18,7 @@ import { z } from 'zod'
 import type { Bindings, Props } from './types'
 import { toKey } from './pages'
 import { EXPLAINER_PROMPT_TEXT } from './explainer'
+import { learnPromptText, PRODUCTION_ORIGIN } from './prompts'
 import { isVisibility, readVisibility, rewriteVisibility, visibilityForWrite, type Visibility } from './visibility'
 
 const DEFAULT_CONTENT_TYPE = 'text/html; charset=utf-8'
@@ -72,6 +73,7 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
   /** Invariant: every valid token carries a slug. Guard tools against a blank one. */
   const hasSlug = () => /^[a-z0-9-]+$/.test(username())
   const noSlug = () => errorResult('No username on this account — sign in again.')
+  const origin = () => String(env.BETTER_AUTH_URL || PRODUCTION_ORIGIN).replace(/\/+$/, '')
 
   /**
    * Ask the user to confirm a destructive write.
@@ -327,6 +329,16 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
     'explainer',
     { title: 'Explainer', description: 'Turn a concept, article, or book into a standalone, interactive HTML explainer page.' },
     () => ({ messages: [{ role: 'user' as const, content: { type: 'text' as const, text: EXPLAINER_PROMPT_TEXT } }] }),
+  )
+
+  server.registerPrompt(
+    'learn',
+    {
+      title: 'Learn something',
+      description:
+        'Based on what you know about me, find one thing I can learn for a quick advantage, build an explainer, and publish it on Pustak.',
+    },
+    () => ({ messages: [{ role: 'user' as const, content: { type: 'text' as const, text: learnPromptText(origin()) } }] }),
   )
 
   // The explainer is deliberately NOT also mirrored as a tool for clients that
