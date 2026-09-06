@@ -23,6 +23,7 @@ import {
 import { OG_PNG } from './og-png'
 import type { Bindings } from './types'
 import { SITE_PAGE_SLUGS, sitePageHtml } from './site-pages'
+import { canonicalOrigin } from './prompts'
 
 type AppCtx = Context<{ Bindings: Bindings }>
 
@@ -201,7 +202,10 @@ export function registerPageRoutes(app: Hono<{ Bindings: Bindings }>) {
   app.get('/_openapi.json', (c) => c.json(openApiSpec(new URL(c.req.url).origin)))
 
   for (const slug of SITE_PAGE_SLUGS) {
-    app.get('/' + slug, (c) => c.html(sitePageHtml(slug, new URL(c.req.url).origin)))
+    app.get('/' + slug, (c) => {
+      const origin = canonicalOrigin(c.env.BETTER_AUTH_URL || new URL(c.req.url).origin)
+      return c.html(sitePageHtml(slug, origin))
+    })
     app.get('/' + slug + '/', (c) => c.redirect('/' + slug))
   }
 
