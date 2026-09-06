@@ -300,7 +300,8 @@ async function servePage(c: AppCtx, key: string): Promise<Response> {
   const embed = c.req.query('pustak-embed') === '1'
   if (isHtmlContentType(headers.get('content-type') ?? undefined)) {
     let html = await object.text()
-    html = injectBranding(html, { embed })
+    const signedIn = !!(await getSessionUser(c.env, c.req.raw))
+    html = injectBranding(html, { embed, signedIn })
     if (!embed) {
       const origin = new URL(c.req.url).origin
       const pathTitle = key.split('/').pop() || key
