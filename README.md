@@ -15,7 +15,7 @@ On top of the page store, Pustak ships:
 - **Profiles** at `/<username>` listing the pages the owner has made **public**.
 - **Three-state visibility** on every page: public, unlisted, or private.
 - **A remote MCP server** at `/mcp` (Streamable HTTP) exposing tools, resources
-  and an `explainer` prompt — see [MCP server](#mcp-server).
+  and `explainer` / `learn` prompts — see [MCP server](#mcp-server).
 - **OAuth 2.1 with passwordless email + OTP login** — MCP clients (e.g. Claude)
   authenticate via standard OAuth. See [Authentication](#authentication).
 - **Pustak branding on shared pages** — every served HTML page carries an
@@ -48,6 +48,9 @@ and scoped to your own username slug.
 | Method   | Path                  | Auth | Description                                             |
 | -------- | --------------------- | ---- | ------------------------------------------------------ |
 | `GET`    | `/`                   | —    | Landing (signed out) or dashboard (signed in).         |
+| `GET`    | `/why`                | —    | Why HTML, why Thariq, why this service.                |
+| `GET`    | `/install`            | —    | Prompt page: tell an agent to install the MCP server.  |
+| `GET`    | `/learn`              | —    | Prompt page: personal explainer, then publish to Pustak. |
 | `GET`    | `/<username>`         | —    | Profile (public pages; owners also see the rest).      |
 | `GET`    | `/<username>/<path>`  | —*   | Serve a stored page. `…/` → `index.html`.              |
 | `PUT`    | `/<username>/<path>`  | 🍪   | Create/replace one of *your* pages. Body = content. Optional `?visibility=` or `X-Pustak-Visibility`. |
@@ -70,6 +73,11 @@ OAuth/auth routes are reserved and cannot be used as slugs or stored as pages.
 ## Pages & dashboard
 
 - **`/`** — signed-out landing (proof + sign-in as the second step); signed-in dashboard.
+- **`/why`** — why HTML artifacts, with a link to Thariq Shihipar's gallery, and why Pustak.
+- **`/install`** — a prompt you give an agent so it installs the MCP server.
+- **`/learn`** — a prompt you give any agent: pick something you can learn for a
+  quick advantage, build an explainer, then publish it (via `write_page` if MCP
+  is already connected, otherwise sign in and upload).
 - **`/_browse`** — the signed-in dashboard. Redirects to `/_login` when signed out.
 - **`/_login`** — passwordless email + OTP sign-in / account creation.
 - **`/_choose-username`** — first-login slug picker.
@@ -98,8 +106,9 @@ authenticated user.
   overwrites keep the current state unless visibility is stated).
 - **Resources:** `pustak://about`, `pustak://pages` (JSON catalogue), and the
   template `pustak://page/{+path}` (a single page's content).
-- **Prompt:** `explainer` — the body lives in `src/explainer.ts`
-  (`EXPLAINER_PROMPT_TEXT`) and is picked up automatically.
+- **Prompts:** `explainer` (`src/explainer.ts`) and `learn` (`src/prompts.ts`).
+  `/learn` serves the same `learn` text as HTML for agents with no MCP yet.
+  `/install` is a separate prompt page that tells an agent to add this server.
 
 Point an MCP client at `https://pustak.prashamhtrivedi.app/mcp`. It will discover
 the authorization server, register itself (Dynamic Client Registration), send you
@@ -162,7 +171,7 @@ competing with the prompt a capable client already offers on the correct path.
 So the surface stays honest: prompts are prompts, resources are resources, and a
 client that ignores them is leaving its own capability on the table. Note that
 `pustak://pages` and `pustak://page/{+path}` are already covered by `list_pages` /
-`read_page` anyway, so what's actually lost is just the `explainer` prompt.
+`read_page` anyway, so what's actually lost is just the `explainer` and `learn` prompts.
 
 This may become detectable later: on 2026-07-28 client identity rides every
 request, so once clients move off the 2025-era lane a server can adapt per request
@@ -270,7 +279,9 @@ is ever logged).
 - `src/theme.ts` — shared Indic-pothi palette.
 - `src/branding.ts` — the injected Pustak mark for shared pages.
 - `src/login-ui.ts` / `src/ui.ts` — the branded login screens and the session-based dashboard.
-- `src/explainer.ts` — the `explainer` prompt body (fill this in).
+- `src/explainer.ts` — the `explainer` prompt body (pedagogy; no prescribed CSS).
+- `src/prompts.ts` / `src/site-pages.ts` — `learn` / install prompt text and the
+  `/install`, `/learn`, `/why` pages.
 - `migrations/` — Better Auth D1 schema + username column; `scripts/auth-gen.ts` regenerates the base schema.
 - `wrangler.jsonc` — Worker config: R2, KV, D1, service binding, vars.
 - `.dev.vars.example` — template for local secrets.

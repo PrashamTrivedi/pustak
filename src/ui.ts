@@ -135,6 +135,8 @@ ${THEME_ROOT_CSS}
   .mcp-field, .mcp-client { display: grid; gap: .35rem; }
   .mcp-clients { display: grid; gap: 1rem; margin-top: 1.1rem; }
   .mcp .hint { margin: 0 0 1rem; }
+  .mcp .hint a { color: var(--sindoor); border-bottom: 1.5px solid var(--haldi); padding-bottom: 1px; text-decoration: none; }
+  .mcp .hint a:hover { color: var(--sindoor-deep); border-color: var(--sindoor); }
   .mcp .hint strong { color: var(--sindoor); font-weight: 600; }
   .codeline, .codeblock { display: flex; gap: .5rem; background: var(--paper); border: 1.5px solid var(--rule); border-radius: 4px; padding: .55rem .7rem; box-shadow: inset 2.5px 0 0 #b2301855; }
   .codeline { align-items: center; }
@@ -302,7 +304,7 @@ ${THEME_ROOT_CSS}
       <details>
         <summary><span class="om">⌁</span> <span class="card-label" lang="hi" style="margin:0">यंत्र-द्वार<small>Connect via MCP · drive Pustak from your AI client</small></span></summary>
         <div class="up">
-          <p class="hint">Pustak speaks the <strong>Model Context Protocol</strong> over a streamable-HTTP endpoint. Add it to any MCP client — Claude Code, Claude Desktop, Cursor — to <em>list, read, write, delete &amp; set visibility</em> of your pages and use the <code>explainer</code> prompt. On first connect you'll be sent here to authorize as <strong>@${esc(username)}</strong>.</p>
+          <p class="hint">Pustak speaks the <strong>Model Context Protocol</strong> over a streamable-HTTP endpoint. Add it to any MCP client — Claude Code, Claude Desktop, Cursor — to <em>list, read, write, delete &amp; set visibility</em> of your pages and use the <code>explainer</code> and <code>learn</code> prompts. On first connect you'll be sent here to authorize as <strong>@${esc(username)}</strong>. Public install prompt: <a href="/install">/install</a>.</p>
 
           <div class="mcp-field">
             <span class="l">द्वार · Endpoint</span>
@@ -319,7 +321,7 @@ ${THEME_ROOT_CSS}
               <div class="codeblock"><code id="mcp-json"></code><button class="mini copy" type="button" data-copy-target="mcp-json" title="copy config" aria-label="copy config">⎘</button></div>
             </div>
           </div>
-          <span class="micro">Tools · <em>whoami</em> · <em>list_pages</em> · <em>read_page</em> · <em>write_page</em> · <em>delete_page</em> · <em>set_visibility</em> &nbsp;॥&nbsp; Prompt · <em>explainer</em></span>
+          <span class="micro">Tools · <em>whoami</em> · <em>list_pages</em> · <em>read_page</em> · <em>write_page</em> · <em>delete_page</em> · <em>set_visibility</em> &nbsp;॥&nbsp; Prompts · <em>explainer</em> · <em>learn</em></span>
         </div>
       </details>
     </section>
