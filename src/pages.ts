@@ -264,6 +264,7 @@ async function serveOrProfile(c: AppCtx): Promise<Response> {
     if (model) {
       c.header('Vary', 'Cookie')
       if (model.isOwner) c.header('Cache-Control', 'private, no-store')
+      if (model.isOwner && model.asPublic) c.header('X-Robots-Tag', 'noindex, nofollow')
       return c.html(profileHtml(model))
     }
   }

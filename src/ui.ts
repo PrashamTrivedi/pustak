@@ -245,7 +245,7 @@ ${THEME_ROOT_CSS}
     <p class="invocation" lang="sa">॥ पृष्ठानां सङ्ग्रहः ॥</p>
     <h1 lang="hi">पुस्तक<span class="bindu">।</span></h1>
     <p class="latin">Pustak · pages, served from the edge</p>
-    <p class="colophon" lang="hi">किनारे पर रखे आपके पृष्ठ — your folios, served from the edge. <a href="/_docs">विवरण · API spec ▸</a></p>
+    <p class="colophon" lang="hi">किनारे पर रखे आपके पृष्ठ — your folios, served from the edge. <a href="/${esc(username)}">प्रोफ़ाइल · Profile</a> · <a href="/_docs">विवरण · API spec ▸</a></p>
   </header>
 
   <svg class="ornament" width="120" height="34" viewBox="0 0 120 34" fill="none" aria-hidden="true">
@@ -262,6 +262,7 @@ ${THEME_ROOT_CSS}
       <p class="card-label" lang="hi">प्रवेश<small>Signed in</small></p>
       <div class="bar">
         <span class="field" style="gap:.5rem"><span class="tilak">۰</span><strong>@${esc(username)}</strong><span class="micro" style="margin:0">${esc(email)}</span></span>
+        <a href="/${esc(username)}" class="logout-btn" style="text-decoration:none">प्रोफ़ाइल · Profile</a>
         <form method="POST" action="/logout" style="margin:0"><button type="submit" class="logout-btn">बाहर · Sign out</button></form>
         <span id="status"></span>
       </div>
