@@ -99,6 +99,48 @@ describe('buildProfileModel', () => {
     assert.equal(m.pages.length, 1)
     assert.equal(m.pages[0].path, 'open.html')
   })
+
+  it('omits about when neither index.html nor about.html exists', () => {
+    const m = buildProfileModel(
+      user,
+      [{ path: 'open.html', visibility: 'public' }],
+      { isOwner: true, asPublic: false, origin: 'https://example.com', signedIn: true },
+    )
+    assert.equal(m.aboutHref, null)
+  })
+
+  it('uses about.html when index.html is absent', () => {
+    const m = buildProfileModel(
+      user,
+      [{ path: 'about.html', visibility: 'public' }, { path: 'open.html', visibility: 'public' }],
+      { isOwner: false, asPublic: false, origin: 'https://example.com', signedIn: false },
+    )
+    assert.equal(m.aboutHref, '/alice/about.html?pustak-embed=1')
+  })
+
+  it('prefers index.html over about.html', () => {
+    const m = buildProfileModel(
+      user,
+      [
+        { path: 'index.html', visibility: 'public' },
+        { path: 'about.html', visibility: 'public' },
+      ],
+      { isOwner: false, asPublic: false, origin: 'https://example.com', signedIn: false },
+    )
+    assert.equal(m.aboutHref, '/alice/index.html?pustak-embed=1')
+  })
+
+  it('falls back to public about.html when index.html is private', () => {
+    const m = buildProfileModel(
+      user,
+      [
+        { path: 'index.html', visibility: 'private' },
+        { path: 'about.html', visibility: 'public' },
+      ],
+      { isOwner: false, asPublic: false, origin: 'https://example.com', signedIn: false },
+    )
+    assert.equal(m.aboutHref, '/alice/about.html?pustak-embed=1')
+  })
 })
 
 describe('profileHtml', () => {
@@ -135,5 +177,18 @@ describe('profileHtml', () => {
     assert.ok(profileHtml(preview).includes('as a visitor sees it'))
     assert.equal(profileHtml(preview).includes('_browse'), false)
     assert.equal(profileHtml(preview).includes('quiet.html'), false)
+  })
+
+  it('renders no About section when aboutHref is absent', async () => {
+    const { profileHtml } = await import('./profile')
+    const m = buildProfileModel(
+      user,
+      [{ path: 'open.html', visibility: 'public' }],
+      { isOwner: true, asPublic: false, origin: 'https://example.com', signedIn: true },
+    )
+    const html = profileHtml(m)
+    assert.equal(m.aboutHref, null)
+    assert.equal(html.includes('<section class="about">'), false)
+    assert.equal(/<h2>About<\/h2>/.test(html), false)
   })
 })

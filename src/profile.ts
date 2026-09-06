@@ -34,6 +34,27 @@ export type ListedObject = {
   visibility: Visibility
 }
 
+const ABOUT_PATHS = ['index.html', 'about.html'] as const
+
+function isAboutPath(path: string): boolean {
+  return path === 'index.html' || path === 'about.html'
+}
+
+function resolveAboutHref(
+  user: PublicUser,
+  objects: ListedObject[],
+  effectiveOwner: boolean,
+): string | null {
+  for (const path of ABOUT_PATHS) {
+    const o = objects.find((x) => x.path === path)
+    if (!o) continue
+    if (effectiveOwner || o.visibility === 'public') {
+      return `${pageHref(user.username, path)}?pustak-embed=1`
+    }
+  }
+  return null
+}
+
 function pageHref(username: string, path: string): string {
   return '/' + [username, ...path.split('/')].map(encodeURIComponent).join('/')
 }
@@ -45,11 +66,9 @@ export function buildProfileModel(
   opts: { isOwner: boolean; asPublic: boolean; origin: string; signedIn: boolean },
 ): ProfileModel {
   const effectiveOwner = opts.isOwner && !opts.asPublic
-  let indexVisibility: Visibility | null = null
   const listed: ProfilePage[] = []
 
   for (const o of objects) {
-    if (o.path === 'index.html') indexVisibility = o.visibility
     if (!effectiveOwner && o.visibility !== 'public') continue
     listed.push({
       path: o.path,
@@ -64,7 +83,7 @@ export function buildProfileModel(
     for (const o of objects) counts[o.visibility]++
   }
 
-  const aboutOk = indexVisibility !== null && (effectiveOwner || indexVisibility === 'public')
+  const aboutHref = resolveAboutHref(user, objects, effectiveOwner)
 
   return {
     user,
@@ -73,7 +92,7 @@ export function buildProfileModel(
     asPublic: opts.asPublic,
     effectiveOwner,
     signedIn: opts.signedIn,
-    aboutHref: aboutOk ? `/${encodeURIComponent(user.username)}/index.html?pustak-embed=1` : null,
+    aboutHref,
     pages: listed.sort((a, b) => a.path.localeCompare(b.path)),
     counts,
   }
@@ -136,9 +155,9 @@ export function profileHtml(model: ProfileModel): string {
       ? `<link rel="canonical" href="${esc(profileUrl)}" />`
       : ''
 
-  const publicPages = model.pages.filter((p) => p.visibility === 'public' && p.path !== 'index.html')
+  const publicPages = model.pages.filter((p) => p.visibility === 'public' && !isAboutPath(p.path))
   const hiddenPages = model.effectiveOwner
-    ? model.pages.filter((p) => p.visibility !== 'public' && p.path !== 'index.html')
+    ? model.pages.filter((p) => p.visibility !== 'public' && !isAboutPath(p.path))
     : []
 
   const pageRow = (p: ProfilePage, mark?: string) =>
