@@ -28,6 +28,7 @@ Session: `probe@example.com` → slug `probe-user`.
 - `PUT` `style.css` as `text/css`, `PATCH` to public → `Content-Type: text/css`, no robots header.
 - Overwrite of a public/private page with no stated visibility keeps that state (`listed.html` stayed public, `probe.html` stayed private). A new page with no stated visibility is still unlisted. An explicit `?visibility=` on PUT still wins.
 - Invalid visibility `banana` → 400. Cross-user PATCH → 403.
+- `GET /` and `GET /<username>` send `Vary: Cookie`. Dashboard and owner profiles send `Cache-Control: private, no-store`.
 
 ## Profile / embed / meta
 
