@@ -1,7 +1,7 @@
 // The Pustak MCP server, served statelessly over Streamable HTTP at /mcp by
 // `createMcpHandler` (agents/mcp/server) on top of MCP SDK v2. The authenticated
 // user arrives as OAuth props, read via `getMcpAuthContext()`. It offers:
-//   • tools     — whoami, list_pages, read_page, write_page, delete_page
+//   • tools     — whoami, list_pages, read_page, write_page, delete_page, set_visibility
 //   • resources — pustak://about, pustak://pages, pustak://page/{path}
 //   • prompt    — explainer (body in src/explainer.ts)
 //
@@ -18,6 +18,7 @@ import { z } from 'zod'
 import type { Bindings, Props } from './types'
 import { toKey } from './pages'
 import { EXPLAINER_PROMPT_TEXT } from './explainer'
+import { isVisibility, readVisibility, rewriteVisibility, visibilityForWrite, type Visibility } from './visibility'
 
 const DEFAULT_CONTENT_TYPE = 'text/html; charset=utf-8'
 
@@ -32,15 +33,22 @@ function keyFor(username: string, path: string): string {
 const textResult = (text: string) => ({ content: [{ type: 'text' as const, text }] })
 const errorResult = (text: string) => ({ isError: true, content: [{ type: 'text' as const, text }] })
 
+type ListedPage = { path: string; size: number; uploaded: string; visibility: Visibility }
+
 /** List every object under a user's slug prefix, following R2 pagination. */
-async function listPages(base: string, prefix = '') {
+async function listPages(base: string, prefix = ''): Promise<ListedPage[]> {
   const full = base + prefix.replace(/^\/+/, '')
-  const pages: { path: string; size: number; uploaded: string }[] = []
+  const pages: ListedPage[] = []
   let cursor: string | undefined
   do {
-    const listing = await env.BUCKET.list({ prefix: full, cursor })
+    const listing = await env.BUCKET.list({ prefix: full, cursor, include: ['customMetadata'] })
     for (const o of listing.objects) {
-      pages.push({ path: o.key.slice(base.length), size: o.size, uploaded: o.uploaded.toISOString() })
+      pages.push({
+        path: o.key.slice(base.length),
+        size: o.size,
+        uploaded: o.uploaded.toISOString(),
+        visibility: readVisibility(o.customMetadata),
+      })
     }
     cursor = listing.truncated ? listing.cursor : undefined
   } while (cursor)
@@ -160,18 +168,26 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
       title: 'Write page',
       description:
         'Create or replace a page in your space. Served at /<username>/<path>. ' +
+        'Optional visibility: public (listed on your profile, indexable), unlisted (anyone with the link can open it; not protected; not on your profile), or private (owner only). ' +
+        'If omitted on a new page, it is unlisted. If omitted when replacing an existing page, the current visibility is kept. ' +
         'Replacing an existing page asks for confirmation first.',
       inputSchema: z.object({
         path: z.string().describe('Slug-relative path, e.g. "explainers/intro".'),
         content: z.string().describe('The page body (usually HTML).'),
         contentType: z.string().optional().describe('MIME type. Defaults to text/html.'),
+        visibility: z
+          .enum(['public', 'unlisted', 'private'])
+          .optional()
+          .describe(
+            'Page visibility. Omit to keep the existing state, or unlisted for a new page — anyone with the link can open unlisted pages; they are not protected.',
+          ),
         confirm: z.boolean().optional().describe('Set true to confirm overwriting an existing page.'),
       }),
       // Creating is additive, but this same tool silently replaces an existing
       // page, so it is flagged destructive and non-idempotent.
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
-    async ({ path, content, contentType, confirm: confirmArg }, c) => {
+    async ({ path, content, contentType, visibility, confirm: confirmArg }, c) => {
       if (!hasSlug()) return noSlug()
       const key = keyFor(username(), path)
 
@@ -187,11 +203,12 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
         if (blocked) return blocked
       }
 
+      const vis: Visibility = await visibilityForWrite(env.BUCKET, key, visibility)
       await env.BUCKET.put(key, content, {
         httpMetadata: { contentType: contentType || DEFAULT_CONTENT_TYPE },
-        customMetadata: { owner: email() },
+        customMetadata: { owner: email(), visibility: vis },
       })
-      return textResult(`${existing ? 'Replaced' : 'Saved'} /${key} (${content.length} bytes).`)
+      return textResult(`${existing ? 'Replaced' : 'Saved'} /${key} (${content.length} bytes, ${vis}).`)
     },
   )
 
@@ -225,6 +242,29 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
     },
   )
 
+  server.registerTool(
+    'set_visibility',
+    {
+      title: 'Set visibility',
+      description:
+        'Change the visibility of one of your pages. Unlisted means anyone holding the link can open it; it is not protected. ' +
+        'Public lists the page on your profile and may be indexed. Private is owner-only.',
+      inputSchema: z.object({
+        path: z.string().describe('Slug-relative path, e.g. "explainers/intro".'),
+        visibility: z.enum(['public', 'unlisted', 'private']).describe('New visibility.'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ path, visibility }) => {
+      if (!hasSlug()) return noSlug()
+      if (!isVisibility(visibility)) return errorResult('Invalid visibility.')
+      const key = keyFor(username(), path)
+      const result = await rewriteVisibility(env.BUCKET, key, visibility)
+      if (result === 'missing') return errorResult(`Not found: /${key}`)
+      return textResult(`Set /${key} to ${visibility}.`)
+    },
+  )
+
   // --- Resources ---------------------------------------------------------------
   // Note `pustak://pages` and `pustak://page/{path}` are already mirrored by the
   // list_pages / read_page tools, so tools-only clients lose nothing here.
@@ -238,8 +278,9 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
           uri: uri.href,
           text:
             'Pustak stores standalone HTML pages in Cloudflare R2 and serves them from the edge. ' +
-            "Each user's pages live under their username slug (/<username>/...). Reads are public; " +
-            `writes are authenticated. You are ${email()} (@${username()}).`,
+            "Each user's pages live under their username slug (/<username>/...). " +
+            'Each page is public (listed on the profile, indexable), unlisted (anyone with the link can open it; not protected; not listed), or private (owner only). ' +
+            `Writes are authenticated. You are ${email()} (@${username()}).`,
         },
       ],
     }),

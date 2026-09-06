@@ -1,10 +1,6 @@
 // Built-in pages served from reserved routes. Kept out of index.ts so the Worker
 // logic stays readable. The Swagger page is intended to be temporary.
-
-/** Escape a value for safe interpolation into HTML/JS attribute or text. */
-function esc(s: string): string {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
-}
+import { THEME_ROOT_CSS, esc } from './theme'
 
 /**
  * The signed-in dashboard: lists / views / uploads / deletes the user's own
@@ -21,22 +17,7 @@ export function dashboardHtml(username: string, email: string): string {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Mukta:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 <style>
-  :root {
-    --paper: #e7d3a0;
-    --paper-2: #efe1bf;
-    --paper-edge: #ddc795;
-    --ink: #2d1f08;
-    --ink-soft: #6b5524;
-    --ink-faint: #927a45;
-    --sindoor: #b23018;
-    --sindoor-deep: #8a210d;
-    --haldi: #c4881a;
-    --neel: #243a82;
-    --rule: #c9ad72;
-    --display: "Rozha One", Georgia, serif;
-    --text: "Mukta", system-ui, sans-serif;
-    --shadow: 0 1px 0 #fff7e3, 0 16px 34px -22px #4a330f;
-  }
+${THEME_ROOT_CSS}
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   ::selection { background: var(--sindoor); color: #fdf3da; }
@@ -174,7 +155,12 @@ export function dashboardHtml(username: string, email: string): string {
   table { width: 100%; border-collapse: collapse; }
   thead th { font-weight: 600; font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: var(--ink-faint); text-align: left; padding: .55rem .65rem; border-bottom: 2px solid var(--sindoor); }
   thead th.num { text-align: right; }
-  tbody tr { border-bottom: 1px solid var(--rule); animation: unfurl .5s both; animation-delay: calc(var(--i,0) * 50ms); }
+  tbody tr.row-public { box-shadow: inset 3px 0 0 var(--sindoor); background: linear-gradient(90deg, #b2301814, transparent 70%); }
+  tbody tr.row-public:hover { background: linear-gradient(90deg, #b2301826, transparent 82%); }
+  .vis { display: flex; flex-direction: column; gap: .2rem; min-width: 8.5rem; }
+  .vis select { font-family: var(--text); font-size: .78rem; color: var(--ink); background: var(--paper); border: 1.5px solid var(--rule); border-radius: 3px; padding: .28rem .4rem; cursor: pointer; }
+  .vis .chip-public { font-weight: 700; font-size: .58rem; letter-spacing: .1em; text-transform: uppercase; color: #fdf2d8; background: var(--sindoor); border-radius: 3px; padding: .1rem .4rem; width: fit-content; }
+  .vis-help { font-size: .68rem; color: var(--ink-faint); max-width: 11rem; }
   tbody tr:hover { background: linear-gradient(90deg, #c4881a26, transparent 82%); box-shadow: inset 3px 0 0 var(--sindoor); }
   td { padding: .72rem .65rem; vertical-align: middle; }
   td.idx { font-family: var(--display); font-size: 1.15rem; color: var(--sindoor); width: 2.6rem; text-align: center; }
@@ -316,7 +302,7 @@ export function dashboardHtml(username: string, email: string): string {
       <details>
         <summary><span class="om">⌁</span> <span class="card-label" lang="hi" style="margin:0">यंत्र-द्वार<small>Connect via MCP · drive Pustak from your AI client</small></span></summary>
         <div class="up">
-          <p class="hint">Pustak speaks the <strong>Model Context Protocol</strong> over a streamable-HTTP endpoint. Add it to any MCP client — Claude Code, Claude Desktop, Cursor — to <em>list, read, write &amp; delete</em> your pages and use the <code>explainer</code> prompt. On first connect you'll be sent here to authorize as <strong>@${esc(username)}</strong>.</p>
+          <p class="hint">Pustak speaks the <strong>Model Context Protocol</strong> over a streamable-HTTP endpoint. Add it to any MCP client — Claude Code, Claude Desktop, Cursor — to <em>list, read, write, delete &amp; set visibility</em> of your pages and use the <code>explainer</code> prompt. On first connect you'll be sent here to authorize as <strong>@${esc(username)}</strong>.</p>
 
           <div class="mcp-field">
             <span class="l">द्वार · Endpoint</span>
@@ -333,7 +319,7 @@ export function dashboardHtml(username: string, email: string): string {
               <div class="codeblock"><code id="mcp-json"></code><button class="mini copy" type="button" data-copy-target="mcp-json" title="copy config" aria-label="copy config">⎘</button></div>
             </div>
           </div>
-          <span class="micro">Tools · <em>whoami</em> · <em>list_pages</em> · <em>read_page</em> · <em>write_page</em> · <em>delete_page</em> &nbsp;॥&nbsp; Prompt · <em>explainer</em></span>
+          <span class="micro">Tools · <em>whoami</em> · <em>list_pages</em> · <em>read_page</em> · <em>write_page</em> · <em>delete_page</em> · <em>set_visibility</em> &nbsp;॥&nbsp; Prompt · <em>explainer</em></span>
         </div>
       </details>
     </section>
@@ -357,7 +343,7 @@ export function dashboardHtml(username: string, email: string): string {
   </div>
 
   <table id="tbl" hidden>
-    <thead><tr><th class="num">क्रम</th><th>Page · पृष्ठ</th><th>Type</th><th class="num">Size</th><th>Updated</th><th></th></tr></thead>
+    <thead><tr><th class="num">क्रम</th><th>Page · पृष्ठ</th><th>Type</th><th>Visibility</th><th class="num">Size</th><th>Updated</th><th></th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
   <div id="empty" class="empty" hidden><span class="big" lang="hi">रिक्त पुस्तक</span>no pages have been written yet.</div>
@@ -426,20 +412,30 @@ function applyView() {
     return a.path.localeCompare(b.path) * dir;
   });
   tbl.hidden = false; rows.innerHTML = '';
-  if (!view.length) { rows.innerHTML = '<tr><td colspan="6" class="noresult">no paths match “' + esc(q) + '”</td></tr>'; return; }
+  if (!view.length) { rows.innerHTML = '<tr><td colspan="7" class="noresult">no paths match “' + esc(q) + '”</td></tr>'; return; }
   view.forEach((p, i) => {
     const tr = document.createElement('tr');
     tr.style.setProperty('--i', i);
+    const vis = p.visibility || 'unlisted';
+    if (vis === 'public') tr.classList.add('row-public');
     const href = '/' + p.key.split('/').map(encodeURIComponent).join('/');
     const cut = p.path.lastIndexOf('/');
     const dirp = cut >= 0 ? esc(p.path.slice(0, cut + 1)) : '';
     const name = esc(cut >= 0 ? p.path.slice(cut + 1) : p.path);
     const ek = encodeURIComponent(p.key);
+    const visHelp = vis === 'unlisted' ? '<span class="vis-help">anyone with the link can open it; it is not protected</span>' : '';
+    const publicChip = vis === 'public' ? '<span class="chip-public">Public</span>' : '';
     tr.innerHTML =
       '<td class="idx">' + deva(i + 1) + '</td>' +
       '<td class="key"><a class="open" href="' + href + '" data-key="' + ek + '">' +
         '<span class="dir">' + dirp + '</span><span class="name">' + name + '</span></a></td>' +
       '<td><span class="chip" title="' + esc(p.contentType || '') + '">' + esc(fmtType(p.contentType)) + '</span></td>' +
+      '<td><div class="vis">' + publicChip +
+        '<select data-key="' + ek + '" aria-label="visibility">' +
+          '<option value="public"' + (vis === 'public' ? ' selected' : '') + '>Public</option>' +
+          '<option value="unlisted"' + (vis === 'unlisted' ? ' selected' : '') + '>Unlisted</option>' +
+          '<option value="private"' + (vis === 'private' ? ' selected' : '') + '>Private</option>' +
+        '</select>' + visHelp + '</div></td>' +
       '<td class="num">' + fmtSize(p.size) + '</td>' +
       '<td class="date">' + fmtDate(p.uploaded) + '</td>' +
       '<td class="act">' +
@@ -452,6 +448,7 @@ function applyView() {
     a.addEventListener('click', (e) => { e.preventDefault(); openViewer(decodeURIComponent(a.dataset.key), a.getAttribute('href')); }));
   rows.querySelectorAll('button.copy').forEach((b) => b.addEventListener('click', () => copyLink(b.dataset.href)));
   rows.querySelectorAll('button.del').forEach((b) => b.addEventListener('click', () => del(decodeURIComponent(b.dataset.key))));
+  rows.querySelectorAll('select').forEach((s) => s.addEventListener('change', () => setVis(s)));
 }
 
 function openViewer(key, href) {
@@ -503,6 +500,25 @@ async function del(key) {
   const href = '/' + key.split('/').map(encodeURIComponent).join('/');
   const res = await fetch(href, { method: 'DELETE', credentials: 'same-origin' });
   if (res.ok) load(); else setStatus('delete failed: ' + res.status, true);
+}
+
+async function setVis(sel) {
+  const next = sel.value;
+  const prev = sel.dataset.prev || sel.querySelector('option[selected]')?.value || 'unlisted';
+  if (next === 'public') {
+    const ok = confirm('Make this page public? Anyone can open it, it will appear on your profile, and search engines may index it.');
+    if (!ok) { sel.value = prev; return; }
+  }
+  const key = decodeURIComponent(sel.dataset.key);
+  const href = '/' + key.split('/').map(encodeURIComponent).join('/');
+  const res = await fetch(href, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ visibility: next }),
+  });
+  if (res.ok) load();
+  else { setStatus('visibility change failed: ' + res.status, true); sel.value = prev; }
 }
 
 async function upload() {
@@ -599,8 +615,10 @@ export function openApiSpec(origin: string) {
       version: '1.0.0',
       description:
         'Store and serve standalone HTML pages from R2. Each user\'s pages live under their ' +
-        'username slug (/<username>/...). Reads are public; writes, deletes and listing use your ' +
-        'signed-in browser session (same-origin cookie) and are scoped to your own slug.',
+        'username slug (/<username>/...). Each page is public (on the profile, indexable), ' +
+        'unlisted (anyone holding the link can open it; it is not protected; not listed), or private (owner only). ' +
+        'Writes, deletes, listing and visibility changes use your signed-in browser session and are scoped to your own slug. ' +
+        'Signed-out GET / is the landing page. GET /<username> is that user\'s profile.',
     },
     servers: [{ url: origin }],
     components: {
@@ -621,15 +639,28 @@ export function openApiSpec(origin: string) {
         ],
         get: {
           summary: 'Serve a page',
-          description: 'Returns the stored content with its original Content-Type. `/` and trailing `/` map to `index.html`.',
+          description:
+            'Returns stored content when the page is public or unlisted, or when the owner requests a private page. ' +
+            'Private pages return the same 404 as a missing path. Unlisted means anyone with the link can open it; it is not protected. ' +
+            'Unlisted and private responses include X-Robots-Tag: noindex, nofollow.',
           responses: {
             '200': { description: 'Page content', content: { 'text/html': {} } },
-            '404': { description: 'Not found' },
+            '404': { description: 'Not found (missing or private)' },
           },
         },
         put: {
           summary: 'Create or replace a page',
           security: [{ cookieAuth: [] }],
+          parameters: [
+            {
+              name: 'visibility',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ['public', 'unlisted', 'private'] },
+              description:
+                'Stored visibility when stated. Omit on create → unlisted. Omit on replace → keep the current visibility. Also accepted as header X-Pustak-Visibility.',
+            },
+          ],
           requestBody: {
             required: true,
             description: 'Raw page content. Stored Content-Type mirrors the request (default text/html).',
@@ -637,9 +668,32 @@ export function openApiSpec(origin: string) {
           },
           responses: {
             '201': { description: 'Stored' },
-            '400': { description: 'Empty body' },
+            '400': { description: 'Empty body or invalid visibility' },
             '401': { description: 'Missing/invalid token' },
             '403': { description: 'Reserved path' },
+          },
+        },
+        patch: {
+          summary: 'Change page visibility',
+          security: [{ cookieAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['visibility'],
+                  properties: { visibility: { type: 'string', enum: ['public', 'unlisted', 'private'] } },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': { description: 'Updated' },
+            '400': { description: 'Invalid visibility' },
+            '401': { description: 'Unauthorized' },
+            '403': { description: 'Not your page' },
+            '404': { description: 'Not found' },
           },
         },
         post: {
@@ -660,6 +714,21 @@ export function openApiSpec(origin: string) {
             '403': { description: 'Reserved path' },
             '404': { description: 'Not found' },
           },
+        },
+      },
+      '/{username}': {
+        get: {
+          summary: 'User profile',
+          description: 'Public profile for a claimed username: identity, optional sandboxed about frame, and public pages. Owners additionally see unlisted and private pages, marked.',
+          parameters: [{ name: 'username', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: 'Profile HTML' } },
+        },
+      },
+      '/': {
+        get: {
+          summary: 'Landing or dashboard',
+          description: 'Signed-out visitors get the public landing. Signed-in visitors get their dashboard.',
+          responses: { '200': { description: 'HTML' } },
         },
       },
       '/_list': {
@@ -687,6 +756,7 @@ export function openApiSpec(origin: string) {
                             size: { type: 'integer' },
                             uploaded: { type: 'string', format: 'date-time' },
                             contentType: { type: 'string' },
+                            visibility: { type: 'string', enum: ['public', 'unlisted', 'private'] },
                           },
                         },
                       },

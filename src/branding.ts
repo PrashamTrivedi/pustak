@@ -47,10 +47,11 @@ function brandingBadge(): string {
  *
  * The badge invites anonymous visitors to sign in / create an account, so it is
  * skipped for viewers who are already signed in — they'd have no reason to see
- * a "Sign in / Create account" prompt.
+ * a "Sign in / Create account" prompt — and for `?pustak-embed=1` (iframe/OG)
+ * previews that must not carry chrome.
  */
-export function injectBranding(html: string, opts: { signedIn?: boolean } = {}): string {
-  if (opts.signedIn) return html // already signed in — no sign-in invite needed
+export function injectBranding(html: string, opts: { signedIn?: boolean; embed?: boolean } = {}): string {
+  if (opts.embed || opts.signedIn) return html
   if (html.includes('data-pustak-branding')) return html // never double-inject
   const badge = brandingBadge()
   const idx = html.toLowerCase().lastIndexOf('</body>')
