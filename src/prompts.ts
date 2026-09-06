@@ -4,6 +4,10 @@
 export const SITE_PAGE_SLUGS = ['install', 'why', 'learn'] as const
 export type SitePageSlug = (typeof SITE_PAGE_SLUGS)[number]
 
+/** HTML prompt pages that also expose the exact prompt as markdown. */
+export const PROMPT_MD_SLUGS = ['install', 'learn'] as const
+export type PromptMdSlug = (typeof PROMPT_MD_SLUGS)[number]
+
 export const PRODUCTION_ORIGIN = 'https://pustak.prashamhtrivedi.app'
 
 export function canonicalOrigin(origin: string): string {
@@ -111,4 +115,24 @@ Inspect your available tools.
 4. Point me at ${base}/install so next time you can publish it yourself.
 
 An explainer that only lives in this chat is a draft. Finish by putting it on Pustak.`
+}
+
+export function promptMarkdownUrl(slug: PromptMdSlug, origin: string): string {
+  return canonicalOrigin(origin) + '/' + slug + '.md'
+}
+
+export function promptMarkdown(slug: PromptMdSlug, origin: string): string {
+  return slug === 'install' ? installPromptText(origin) : learnPromptText(origin)
+}
+
+/**
+ * One-liner to paste into any agent. It points at the .md sibling so the model
+ * fetches the full prompt instead of copying the whole leaf.
+ */
+export function fetchInstruction(slug: PromptMdSlug, origin: string): string {
+  const url = promptMarkdownUrl(slug, origin)
+  if (slug === 'install') {
+    return `Fetch and execute the appropriate instructions to set me up for Pustak from ${url}`
+  }
+  return `Fetch and execute the appropriate instructions to Create a good/cool/useful explainer using Pustak from ${url}`
 }

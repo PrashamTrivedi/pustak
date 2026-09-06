@@ -50,7 +50,9 @@ and scoped to your own username slug.
 | `GET`    | `/`                   | —    | Landing (signed out) or dashboard (signed in).         |
 | `GET`    | `/why`                | —    | Why HTML, why Thariq, why this service.                |
 | `GET`    | `/install`            | —    | Prompt page: tell an agent to install the MCP server.  |
+| `GET`    | `/install.md`         | —    | Exact install prompt as markdown.                      |
 | `GET`    | `/learn`              | —    | Prompt page: personal explainer, then publish to Pustak. |
+| `GET`    | `/learn.md`           | —    | Exact learn prompt as markdown.                        |
 | `GET`    | `/<username>`         | —    | Profile (public pages; owners also see the rest).      |
 | `GET`    | `/<username>/<path>`  | —*   | Serve a stored page. `…/` → `index.html`.              |
 | `PUT`    | `/<username>/<path>`  | 🍪   | Create/replace one of *your* pages. Body = content. Optional `?visibility=` or `X-Pustak-Visibility`. |
@@ -75,9 +77,13 @@ OAuth/auth routes are reserved and cannot be used as slugs or stored as pages.
 - **`/`** — signed-out landing (proof + sign-in as the second step); signed-in dashboard.
 - **`/why`** — why HTML artifacts, with a link to Thariq Shihipar's gallery, and why Pustak.
 - **`/install`** — a prompt you give an agent so it installs the MCP server.
+  `/install.md` is the same instructions as markdown. Copy-for-agent pastes
+  `Fetch and execute the appropriate instructions to set me up for Pustak from …/install.md`.
 - **`/learn`** — a prompt you give any agent: pick something you can learn for a
   quick advantage, build an explainer, then publish it (via `write_page` if MCP
-  is already connected, otherwise sign in and upload).
+  is already connected, otherwise sign in and upload). `/learn.md` is the
+  markdown sibling. Copy-for-agent pastes
+  `Fetch and execute … to Create a good/cool/useful explainer using Pustak from …/learn.md`.
 - **`/_browse`** — the signed-in dashboard. Redirects to `/_login` when signed out.
 - **`/_login`** — passwordless email + OTP sign-in / account creation.
 - **`/_choose-username`** — first-login slug picker.
@@ -107,8 +113,8 @@ authenticated user.
 - **Resources:** `pustak://about`, `pustak://pages` (JSON catalogue), and the
   template `pustak://page/{+path}` (a single page's content).
 - **Prompts:** `explainer` (`src/explainer.ts`) and `learn` (`src/prompts.ts`).
-  `/learn` serves the same `learn` text as HTML for agents with no MCP yet.
-  `/install` is a separate prompt page that tells an agent to add this server.
+  `/learn` serves the same `learn` text as HTML; `/learn.md` is the exact prompt.
+  `/install` tells an agent to add this server; `/install.md` is the exact prompt.
 
 Point an MCP client at `https://pustak.prashamhtrivedi.app/mcp`. It will discover
 the authorization server, register itself (Dynamic Client Registration), send you

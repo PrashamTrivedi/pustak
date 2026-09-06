@@ -3,6 +3,7 @@
 import { injectOgIfMissing, socialImageUrl, socialMetaTags } from './meta'
 import { THEME_BODY_CSS, THEME_FONTS, THEME_ROOT_CSS, esc } from './theme'
 import {
+  fetchInstruction,
   installPromptText,
   learnPromptText,
   mcpEndpoint,
@@ -11,6 +12,9 @@ import {
 } from './prompts'
 
 export { SITE_PAGE_SLUGS, type SitePageSlug }
+
+/** Who is looking at a first-party site page. `null` username = signed in, slug not chosen yet. */
+export type SiteViewer = { signedIn: boolean; username?: string | null }
 
 const PAGE_META: Record<SitePageSlug, { title: string; description: string }> = {
   install: {
@@ -57,20 +61,30 @@ const PAGE_CSS = /* css */ `
   .cta a.card small { display: block; letter-spacing: .2em; text-transform: uppercase; font-size: .62rem; color: var(--haldi); margin-bottom: .25rem; }
   .cta a.card strong { font-family: var(--display); font-size: 1.35rem; font-weight: 400; }
   .note { font-size: .88rem; color: var(--ink-soft); margin: 0 0 1.1rem; }
+  .give { background: var(--ink); color: #fdf2d8; border-radius: 4px; padding: 1rem 1.1rem; margin: 0 0 1.4rem; box-shadow: var(--shadow); }
+  .give .l { display: block; letter-spacing: .2em; text-transform: uppercase; font-size: .62rem; color: var(--haldi); margin-bottom: .45rem; }
+  .give p { margin: 0; font-size: .98rem; line-height: 1.5; }
+  .give a { color: var(--haldi); border-bottom-color: var(--haldi); }
+  .give a:hover { color: #fdf2d8; border-bottom-color: #fdf2d8; }
   .toast { position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%) translateY(8px); background: var(--ink); color: #fdf2d8; font-size: .82rem; padding: .55rem 1rem; border-radius: 5px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 `
 
-function siteNav(current: SitePageSlug | 'home'): string {
+function siteNav(current: SitePageSlug | 'home', viewer?: SiteViewer): string {
   const link = (href: string, slug: string, label: string) =>
     `<a href="${href}"${current === slug ? ' aria-current="page"' : ''}>${label}</a>`
+  const account = viewer?.signedIn
+    ? viewer.username
+      ? `<a href="/_browse">@${esc(viewer.username)}</a>`
+      : `<a href="/_choose-username">Choose username</a>`
+    : `<a href="/_login">Sign in</a>`
   return /* html */ `<div class="top">
     <a class="mark" href="/" lang="hi">पुस्तक<span class="bindu">।</span></a>
     <nav>
       ${link('/why', 'why', 'Why this')}
       ${link('/learn', 'learn', 'Learn')}
       ${link('/install', 'install', 'Install')}
-      <a href="/_login">Sign in</a>
+      ${account}
     </nav>
   </div>`
 }
@@ -104,6 +118,7 @@ function folio(opts: {
   origin: string
   slug: SitePageSlug
   body: string
+  viewer?: SiteViewer
 }): string {
   const meta = PAGE_META[opts.slug]
   const origin = opts.origin.replace(/\/+$/, '')
@@ -129,7 +144,7 @@ ${PAGE_CSS}
 </head>
 <body>
   <div class="folio">
-    ${siteNav(opts.slug)}
+    ${siteNav(opts.slug, opts.viewer)}
     ${opts.body}
   </div>
   ${copyScript()}
@@ -138,55 +153,66 @@ ${PAGE_CSS}
   return injectOgIfMissing(html, { title, description, url, image })
 }
 
-export function installHtml(origin: string): string {
+export function installHtml(origin: string, viewer?: SiteViewer): string {
   const base = origin.replace(/\/+$/, '')
   const prompt = installPromptText(base)
   const mcp = mcpEndpoint(base)
-  const pageUrl = base + '/install'
+  const give = fetchInstruction('install', base)
   return folio({
     origin: base,
     slug: 'install',
+    viewer,
     body: /* html */ `
     <p class="kicker">A prompt · for your agent</p>
     <h1>Install this MCP server.</h1>
-    <p class="lede">Give this page to your agent. It will add Pustak as a remote MCP server, send you through sign-in, and then it can publish pages for you.</p>
-    <p class="note">Humans can install it by hand too — the commands are in the prompt. Agents: the leaf below is your instruction.</p>
+    <p class="lede">Give the line below to your agent. It fetches the instructions, adds Pustak as a remote MCP server, sends you through sign-in, and then it can publish pages for you.</p>
     <div class="actions">
-      <button class="btn" type="button" data-copy="${esc(pageUrl)}" data-label="URL copied">Copy URL</button>
-      <button class="btn ghost" type="button" data-copy="${esc(prompt)}" data-label="Prompt copied">Copy prompt</button>
+      <button class="btn" type="button" data-copy="${esc(give)}" data-label="Copied">Copy for your agent</button>
+      <a class="btn ghost" href="/install.md">Open .md</a>
       <a class="btn ghost" href="/why">Why this</a>
     </div>
+    <div class="give">
+      <span class="l">Paste this</span>
+      <p>${esc(give)}</p>
+    </div>
+    <p class="note">Humans can install it by hand too — the commands are in the <a href="/install.md">markdown</a>. Agents: fetch that URL; the leaf is the same text.</p>
     <div class="leaf"><pre>${esc(prompt)}</pre></div>
     <p class="note">Endpoint · <code>${esc(mcp)}</code></p>`,
   })
 }
 
-export function learnHtml(origin: string): string {
+export function learnHtml(origin: string, viewer?: SiteViewer): string {
   const base = origin.replace(/\/+$/, '')
   const prompt = learnPromptText(base)
-  const pageUrl = base + '/learn'
+  const give = fetchInstruction('learn', base)
   return folio({
     origin: base,
     slug: 'learn',
+    viewer,
     body: /* html */ `
     <p class="kicker">A workflow · in a prompt</p>
     <h1>Find one thing I can use.</h1>
-    <p class="lede">Paste this URL into any agent. It will pick something you can learn for a quick advantage, build an explainer, and then put the page on Pustak.</p>
-    <p class="note">If the agent already has Pustak MCP tools, it publishes with <code>write_page</code>. If not, it will ask you to <a href="/_login">sign in</a> and upload the file — and point you at <a href="/install">install</a> for next time. We cannot see from here whether MCP is installed; the agent checks its own tools.</p>
+    <p class="lede">Give the line below to any agent. It fetches the instructions, picks something you can learn for a quick advantage, builds an explainer, and puts the page on Pustak.</p>
     <div class="actions">
-      <button class="btn" type="button" data-copy="${esc(pageUrl)}" data-label="URL copied">Copy URL</button>
-      <button class="btn ghost" type="button" data-copy="${esc(prompt)}" data-label="Prompt copied">Copy prompt</button>
+      <button class="btn" type="button" data-copy="${esc(give)}" data-label="Copied">Copy for your agent</button>
+      <a class="btn ghost" href="/learn.md">Open .md</a>
       <a class="btn ghost" href="/install">Install MCP</a>
     </div>
+    <div class="give">
+      <span class="l">Paste this</span>
+      <p>${esc(give)}</p>
+    </div>
+    <p class="note">If the agent already has Pustak MCP tools, it publishes with <code>write_page</code>. If not, it will ask you to <a href="/_login">sign in</a> and upload the file — and point you at <a href="/install">install</a> for next time. We cannot see from here whether MCP is installed; the agent checks its own tools.</p>
     <div class="leaf"><pre>${esc(prompt)}</pre></div>`,
   })
 }
 
-export function whyHtml(origin: string): string {
+export function whyHtml(origin: string, viewer?: SiteViewer): string {
   const base = origin.replace(/\/+$/, '')
   return folio({
     origin: base,
     slug: 'why',
+    viewer,
     body: /* html */ `
     <p class="kicker">Why this</p>
     <h1>Markdown is what agents emit. HTML is what people actually read.</h1>
@@ -219,8 +245,8 @@ export function whyHtml(origin: string): string {
   })
 }
 
-export function sitePageHtml(slug: SitePageSlug, origin: string): string {
-  if (slug === 'install') return installHtml(origin)
-  if (slug === 'learn') return learnHtml(origin)
-  return whyHtml(origin)
+export function sitePageHtml(slug: SitePageSlug, origin: string, viewer?: SiteViewer): string {
+  if (slug === 'install') return installHtml(origin, viewer)
+  if (slug === 'learn') return learnHtml(origin, viewer)
+  return whyHtml(origin, viewer)
 }
