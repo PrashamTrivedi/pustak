@@ -236,9 +236,11 @@ async function requireSlug(c: AppCtx): Promise<SlugSession | { response: Respons
 
 async function home(c: AppCtx): Promise<Response> {
   const user = await getSessionUser(c.env, c.req.raw)
+  c.header('Vary', 'Cookie')
   if (!user) return c.html(landingHtml(new URL(c.req.url).origin))
   const username = await getUsername(c.env, user.id)
   if (!username) return c.redirect('/_choose-username')
+  c.header('Cache-Control', 'private, no-store')
   return c.html(dashboardHtml(username, user.email))
 }
 
@@ -248,6 +250,8 @@ async function dashboard(c: AppCtx): Promise<Response> {
   if (!user) return c.redirect('/_login')
   const username = await getUsername(c.env, user.id)
   if (!username) return c.redirect('/_choose-username')
+  c.header('Cache-Control', 'private, no-store')
+  c.header('Vary', 'Cookie')
   return c.html(dashboardHtml(username, user.email))
 }
 
@@ -257,7 +261,11 @@ async function serveOrProfile(c: AppCtx): Promise<Response> {
   // Bare "/<slug>" (no trailing slash): claimed usernames render a profile.
   if (!path.slice(1).includes('/') && !key.includes('.')) {
     const model = await loadProfile(c.env, c.req.raw, key)
-    if (model) return c.html(profileHtml(model))
+    if (model) {
+      c.header('Vary', 'Cookie')
+      if (model.isOwner) c.header('Cache-Control', 'private, no-store')
+      return c.html(profileHtml(model))
+    }
   }
   return servePage(c, key)
 }

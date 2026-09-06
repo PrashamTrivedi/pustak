@@ -116,7 +116,7 @@ export class PustakMCP extends McpAgent<Bindings, unknown, Props> {
         },
       },
       async ({ path, content, contentType, visibility }) => {
-        if (!this.username) return { isError: true, content: [{ type: 'text', text: 'No username on this account.' }] }
+        if (!this.hasSlug) return this.noSlug()
         const key = this.key(path)
         const vis: Visibility = await visibilityForWrite(this.env.BUCKET, key, visibility)
         await this.env.BUCKET.put(key, content, {
