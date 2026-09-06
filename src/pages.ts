@@ -23,7 +23,7 @@ import {
 import { OG_PNG } from './og-png'
 import type { Bindings } from './types'
 import { SITE_PAGE_SLUGS, sitePageHtml } from './site-pages'
-import { canonicalOrigin } from './prompts'
+import { canonicalOrigin, PROMPT_MD_SLUGS, promptMarkdown } from './prompts'
 
 type AppCtx = Context<{ Bindings: Bindings }>
 
@@ -207,6 +207,15 @@ export function registerPageRoutes(app: Hono<{ Bindings: Bindings }>) {
       return c.html(sitePageHtml(slug, origin))
     })
     app.get('/' + slug + '/', (c) => c.redirect('/' + slug))
+  }
+
+  for (const slug of PROMPT_MD_SLUGS) {
+    app.get('/' + slug + '.md', (c) => {
+      const origin = canonicalOrigin(c.env.BETTER_AUTH_URL || new URL(c.req.url).origin)
+      return c.body(promptMarkdown(slug, origin), 200, {
+        'content-type': 'text/markdown; charset=utf-8',
+      })
+    })
   }
 
   // Homepage: landing for strangers, dashboard when signed in. /_browse stays auth-only.

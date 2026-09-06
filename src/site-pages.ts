@@ -3,6 +3,7 @@
 import { injectOgIfMissing, socialImageUrl, socialMetaTags } from './meta'
 import { THEME_BODY_CSS, THEME_FONTS, THEME_ROOT_CSS, esc } from './theme'
 import {
+  fetchInstruction,
   installPromptText,
   learnPromptText,
   mcpEndpoint,
@@ -57,6 +58,11 @@ const PAGE_CSS = /* css */ `
   .cta a.card small { display: block; letter-spacing: .2em; text-transform: uppercase; font-size: .62rem; color: var(--haldi); margin-bottom: .25rem; }
   .cta a.card strong { font-family: var(--display); font-size: 1.35rem; font-weight: 400; }
   .note { font-size: .88rem; color: var(--ink-soft); margin: 0 0 1.1rem; }
+  .give { background: var(--ink); color: #fdf2d8; border-radius: 4px; padding: 1rem 1.1rem; margin: 0 0 1.4rem; box-shadow: var(--shadow); }
+  .give .l { display: block; letter-spacing: .2em; text-transform: uppercase; font-size: .62rem; color: var(--haldi); margin-bottom: .45rem; }
+  .give p { margin: 0; font-size: .98rem; line-height: 1.5; }
+  .give a { color: var(--haldi); border-bottom-color: var(--haldi); }
+  .give a:hover { color: #fdf2d8; border-bottom-color: #fdf2d8; }
   .toast { position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%) translateY(8px); background: var(--ink); color: #fdf2d8; font-size: .82rem; padding: .55rem 1rem; border-radius: 5px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 `
@@ -142,20 +148,24 @@ export function installHtml(origin: string): string {
   const base = origin.replace(/\/+$/, '')
   const prompt = installPromptText(base)
   const mcp = mcpEndpoint(base)
-  const pageUrl = base + '/install'
+  const give = fetchInstruction('install', base)
   return folio({
     origin: base,
     slug: 'install',
     body: /* html */ `
     <p class="kicker">A prompt · for your agent</p>
     <h1>Install this MCP server.</h1>
-    <p class="lede">Give this page to your agent. It will add Pustak as a remote MCP server, send you through sign-in, and then it can publish pages for you.</p>
-    <p class="note">Humans can install it by hand too — the commands are in the prompt. Agents: the leaf below is your instruction.</p>
+    <p class="lede">Give the line below to your agent. It fetches the instructions, adds Pustak as a remote MCP server, sends you through sign-in, and then it can publish pages for you.</p>
     <div class="actions">
-      <button class="btn" type="button" data-copy="${esc(pageUrl)}" data-label="URL copied">Copy URL</button>
-      <button class="btn ghost" type="button" data-copy="${esc(prompt)}" data-label="Prompt copied">Copy prompt</button>
+      <button class="btn" type="button" data-copy="${esc(give)}" data-label="Copied">Copy for your agent</button>
+      <a class="btn ghost" href="/install.md">Open .md</a>
       <a class="btn ghost" href="/why">Why this</a>
     </div>
+    <div class="give">
+      <span class="l">Paste this</span>
+      <p>${esc(give)}</p>
+    </div>
+    <p class="note">Humans can install it by hand too — the commands are in the <a href="/install.md">markdown</a>. Agents: fetch that URL; the leaf is the same text.</p>
     <div class="leaf"><pre>${esc(prompt)}</pre></div>
     <p class="note">Endpoint · <code>${esc(mcp)}</code></p>`,
   })
@@ -164,20 +174,24 @@ export function installHtml(origin: string): string {
 export function learnHtml(origin: string): string {
   const base = origin.replace(/\/+$/, '')
   const prompt = learnPromptText(base)
-  const pageUrl = base + '/learn'
+  const give = fetchInstruction('learn', base)
   return folio({
     origin: base,
     slug: 'learn',
     body: /* html */ `
     <p class="kicker">A workflow · in a prompt</p>
     <h1>Find one thing I can use.</h1>
-    <p class="lede">Paste this URL into any agent. It will pick something you can learn for a quick advantage, build an explainer, and then put the page on Pustak.</p>
-    <p class="note">If the agent already has Pustak MCP tools, it publishes with <code>write_page</code>. If not, it will ask you to <a href="/_login">sign in</a> and upload the file — and point you at <a href="/install">install</a> for next time. We cannot see from here whether MCP is installed; the agent checks its own tools.</p>
+    <p class="lede">Give the line below to any agent. It fetches the instructions, picks something you can learn for a quick advantage, builds an explainer, and puts the page on Pustak.</p>
     <div class="actions">
-      <button class="btn" type="button" data-copy="${esc(pageUrl)}" data-label="URL copied">Copy URL</button>
-      <button class="btn ghost" type="button" data-copy="${esc(prompt)}" data-label="Prompt copied">Copy prompt</button>
+      <button class="btn" type="button" data-copy="${esc(give)}" data-label="Copied">Copy for your agent</button>
+      <a class="btn ghost" href="/learn.md">Open .md</a>
       <a class="btn ghost" href="/install">Install MCP</a>
     </div>
+    <div class="give">
+      <span class="l">Paste this</span>
+      <p>${esc(give)}</p>
+    </div>
+    <p class="note">If the agent already has Pustak MCP tools, it publishes with <code>write_page</code>. If not, it will ask you to <a href="/_login">sign in</a> and upload the file — and point you at <a href="/install">install</a> for next time. We cannot see from here whether MCP is installed; the agent checks its own tools.</p>
     <div class="leaf"><pre>${esc(prompt)}</pre></div>`,
   })
 }
