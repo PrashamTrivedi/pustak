@@ -79,6 +79,7 @@ describe('site pages', () => {
     assert.equal(html.includes('Copy URL'), false)
     assert.equal(html.includes('Copy prompt'), false)
     assert.match(html, /href="\/install\.md"/)
+    assert.match(html, /href="\/_login">Sign in<\/a>/)
   })
 
   it('learn page copies the fetch instruction for the .md sibling', () => {
@@ -89,6 +90,7 @@ describe('site pages', () => {
     assert.match(html, /We cannot see from here whether MCP is installed/)
     assert.equal(html.includes('/_login'), true)
     assert.match(html, /href="\/learn\.md"/)
+    assert.match(html, /href="\/_login">Sign in<\/a>/)
   })
 
   it('why page cites Thariq and explains the service', () => {
@@ -99,5 +101,20 @@ describe('site pages', () => {
     assert.match(html, /href="\/learn"/)
     assert.match(html, /href="\/install"/)
     assert.match(html, /staying in the loop/)
+    assert.match(html, /href="\/_login">Sign in<\/a>/)
+  })
+
+  it('signed-in nav links to the dashboard instead of Sign in', () => {
+    const viewer = { signedIn: true, username: 'alice' }
+    for (const html of [installHtml(ORIGIN, viewer), learnHtml(ORIGIN, viewer), whyHtml(ORIGIN, viewer)]) {
+      assert.match(html, /href="\/_browse">@alice<\/a>/)
+      assert.equal(/href="\/_login">Sign in<\/a>/.test(html), false)
+    }
+  })
+
+  it('signed-in without a slug points at the username picker', () => {
+    const html = whyHtml(ORIGIN, { signedIn: true, username: null })
+    assert.match(html, /href="\/_choose-username">Choose username<\/a>/)
+    assert.equal(/href="\/_login">Sign in<\/a>/.test(html), false)
   })
 })

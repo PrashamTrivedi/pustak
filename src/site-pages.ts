@@ -13,6 +13,9 @@ import {
 
 export { SITE_PAGE_SLUGS, type SitePageSlug }
 
+/** Who is looking at a first-party site page. `null` username = signed in, slug not chosen yet. */
+export type SiteViewer = { signedIn: boolean; username?: string | null }
+
 const PAGE_META: Record<SitePageSlug, { title: string; description: string }> = {
   install: {
     title: 'Install Pustak MCP',
@@ -67,16 +70,21 @@ const PAGE_CSS = /* css */ `
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 `
 
-function siteNav(current: SitePageSlug | 'home'): string {
+function siteNav(current: SitePageSlug | 'home', viewer?: SiteViewer): string {
   const link = (href: string, slug: string, label: string) =>
     `<a href="${href}"${current === slug ? ' aria-current="page"' : ''}>${label}</a>`
+  const account = viewer?.signedIn
+    ? viewer.username
+      ? `<a href="/_browse">@${esc(viewer.username)}</a>`
+      : `<a href="/_choose-username">Choose username</a>`
+    : `<a href="/_login">Sign in</a>`
   return /* html */ `<div class="top">
     <a class="mark" href="/" lang="hi">पुस्तक<span class="bindu">।</span></a>
     <nav>
       ${link('/why', 'why', 'Why this')}
       ${link('/learn', 'learn', 'Learn')}
       ${link('/install', 'install', 'Install')}
-      <a href="/_login">Sign in</a>
+      ${account}
     </nav>
   </div>`
 }
@@ -110,6 +118,7 @@ function folio(opts: {
   origin: string
   slug: SitePageSlug
   body: string
+  viewer?: SiteViewer
 }): string {
   const meta = PAGE_META[opts.slug]
   const origin = opts.origin.replace(/\/+$/, '')
@@ -135,7 +144,7 @@ ${PAGE_CSS}
 </head>
 <body>
   <div class="folio">
-    ${siteNav(opts.slug)}
+    ${siteNav(opts.slug, opts.viewer)}
     ${opts.body}
   </div>
   ${copyScript()}
@@ -144,7 +153,7 @@ ${PAGE_CSS}
   return injectOgIfMissing(html, { title, description, url, image })
 }
 
-export function installHtml(origin: string): string {
+export function installHtml(origin: string, viewer?: SiteViewer): string {
   const base = origin.replace(/\/+$/, '')
   const prompt = installPromptText(base)
   const mcp = mcpEndpoint(base)
@@ -152,6 +161,7 @@ export function installHtml(origin: string): string {
   return folio({
     origin: base,
     slug: 'install',
+    viewer,
     body: /* html */ `
     <p class="kicker">A prompt · for your agent</p>
     <h1>Install this MCP server.</h1>
@@ -171,13 +181,14 @@ export function installHtml(origin: string): string {
   })
 }
 
-export function learnHtml(origin: string): string {
+export function learnHtml(origin: string, viewer?: SiteViewer): string {
   const base = origin.replace(/\/+$/, '')
   const prompt = learnPromptText(base)
   const give = fetchInstruction('learn', base)
   return folio({
     origin: base,
     slug: 'learn',
+    viewer,
     body: /* html */ `
     <p class="kicker">A workflow · in a prompt</p>
     <h1>Find one thing I can use.</h1>
@@ -196,11 +207,12 @@ export function learnHtml(origin: string): string {
   })
 }
 
-export function whyHtml(origin: string): string {
+export function whyHtml(origin: string, viewer?: SiteViewer): string {
   const base = origin.replace(/\/+$/, '')
   return folio({
     origin: base,
     slug: 'why',
+    viewer,
     body: /* html */ `
     <p class="kicker">Why this</p>
     <h1>Markdown is what agents emit. HTML is what people actually read.</h1>
@@ -233,8 +245,8 @@ export function whyHtml(origin: string): string {
   })
 }
 
-export function sitePageHtml(slug: SitePageSlug, origin: string): string {
-  if (slug === 'install') return installHtml(origin)
-  if (slug === 'learn') return learnHtml(origin)
-  return whyHtml(origin)
+export function sitePageHtml(slug: SitePageSlug, origin: string, viewer?: SiteViewer): string {
+  if (slug === 'install') return installHtml(origin, viewer)
+  if (slug === 'learn') return learnHtml(origin, viewer)
+  return whyHtml(origin, viewer)
 }

@@ -202,9 +202,13 @@ export function registerPageRoutes(app: Hono<{ Bindings: Bindings }>) {
   app.get('/_openapi.json', (c) => c.json(openApiSpec(new URL(c.req.url).origin)))
 
   for (const slug of SITE_PAGE_SLUGS) {
-    app.get('/' + slug, (c) => {
+    app.get('/' + slug, async (c) => {
       const origin = canonicalOrigin(c.env.BETTER_AUTH_URL || new URL(c.req.url).origin)
-      return c.html(sitePageHtml(slug, origin))
+      const user = await getSessionUser(c.env, c.req.raw)
+      const username = user ? await getUsername(c.env, user.id) : null
+      c.header('Vary', 'Cookie')
+      if (user) c.header('Cache-Control', 'private, no-store')
+      return c.html(sitePageHtml(slug, origin, { signedIn: !!user, username }))
     })
     app.get('/' + slug + '/', (c) => c.redirect('/' + slug))
   }
