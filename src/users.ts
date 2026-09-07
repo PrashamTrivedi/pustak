@@ -8,7 +8,7 @@ import { SITE_PAGE_SLUGS } from './prompts'
 // Top-level path segments the Worker owns — a slug may never collide with these.
 const RESERVED_SLUGS = new Set([
   '_login', '_browse', '_docs', '_list', '_openapi.json', '_choose-username',
-  'authorize', 'login', 'logout', 'token', 'register', 'api', 'mcp',
+  'authorize', 'login', 'logout', 'token', 'register', 'api', 'mcp', 'e',
   '.well-known', 'favicon.ico', 'robots.txt', 'index.html', 'admin', 'static',
   '_og.png',
   ...SITE_PAGE_SLUGS,
