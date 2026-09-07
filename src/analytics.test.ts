@@ -115,7 +115,8 @@ describe('landing snippet', () => {
     const html = landingHtml(ORIGIN, KEY)
     assert.equal(html.includes('posthog.init'), true)
     assert.equal(html.includes(KEY), true)
-    assert.equal(html.includes(`${ORIGIN}${POSTHOG_PROXY_PREFIX}`), true)
+    assert.equal(html.includes(`${POSTHOG_PROXY_PREFIX}`), true)
+    assert.equal(html.includes('api_host: "/e"'), true)
     assert.equal(html.includes('us.i.posthog.com'), false)
     assert.equal(html.includes('data-ph="landing_proof_clicked"'), true)
     assert.equal(html.includes('data-ph="landing_login_clicked"'), true)
@@ -126,9 +127,10 @@ describe('landing snippet', () => {
   })
 
   it('points the snippet at the proxy, not PostHog ingest', () => {
-    const snippet = posthogSnippet(ORIGIN, KEY)
-    assert.equal(snippet.includes('"https://pustak.example.test/e"'), true)
+    const snippet = posthogSnippet(KEY)
+    assert.equal(snippet.includes('api_host: "/e"'), true)
     assert.equal(snippet.includes('https://us.posthog.com'), true)
+    assert.equal(snippet.includes('pustak.example.test'), false)
   })
 })
 

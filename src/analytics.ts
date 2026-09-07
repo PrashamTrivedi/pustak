@@ -180,8 +180,8 @@ async function forwardRequest(request: Request, pathWithSearch: string): Promise
 }
 
 /** Official snippet, pointed at our /e proxy, with PII stripped before send. */
-export function posthogSnippet(origin: string, key: string): string {
-  const apiHost = JSON.stringify(origin.replace(/\/+$/, '') + POSTHOG_PROXY_PREFIX)
+export function posthogSnippet(key: string): string {
+  const apiHost = JSON.stringify(POSTHOG_PROXY_PREFIX)
   const token = JSON.stringify(key)
   const uiHost = JSON.stringify(POSTHOG_UI_HOST)
   return `<script>

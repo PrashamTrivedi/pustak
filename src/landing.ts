@@ -19,7 +19,7 @@ export function landingHtml(origin: string, posthogKey?: string): string {
 <title>${title}</title>
 ${tags}
 ${THEME_FONTS}
-${posthogKey ? posthogSnippet(origin, posthogKey) : ''}
+${posthogKey ? posthogSnippet(posthogKey) : ''}
 <style>
 ${THEME_ROOT_CSS}
 ${THEME_BODY_CSS}
