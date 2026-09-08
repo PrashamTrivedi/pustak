@@ -9,7 +9,7 @@ export type Bindings = Cloudflare.Env & {
   OTP_DEV_ECHO?: string
   /** Better Auth signing secret (set via `wrangler secret put BETTER_AUTH_SECRET`). */
   BETTER_AUTH_SECRET: string
-  /** PostHog project token (public; also shipped in the landing snippet). */
+  /** PostHog project token (set via `wrangler secret put POSTHOG_KEY`). */
   POSTHOG_KEY?: string
   /** Injected by OAuthProvider into the default handler at runtime. */
   OAUTH_PROVIDER: import('@cloudflare/workers-oauth-provider').OAuthHelpers

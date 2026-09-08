@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import {
   POSTHOG_PROXY_PREFIX,
@@ -137,5 +138,12 @@ describe('landing snippet', () => {
 describe('reserved proxy slug', () => {
   it('reserves e so it cannot be a username', () => {
     assert.equal(isReservedSlug('e'), true)
+  })
+})
+
+describe('wrangler config', () => {
+  it('does not commit POSTHOG_KEY as a var', () => {
+    const cfg = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8')
+    assert.equal(cfg.includes('POSTHOG_KEY'), false)
   })
 })

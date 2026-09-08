@@ -77,9 +77,7 @@
     // ALLOWED_FROM_DOMAIN (prashamhtrivedi.app) — no display name.
     "OTP_FROM_EMAIL": "pustak@prashamhtrivedi.app",
     // Better Auth canonical origin (no /api/auth suffix). Set per-env if needed.
-    "BETTER_AUTH_URL": "https://pustak.prashamhtrivedi.app",
-    // PostHog project API key — public by design (it is in the landing page).
-    "POSTHOG_KEY": "phc_P3DkaepdW0WduXZxnSHodSgydifr6BTrk6qXX1KndVC"
+    "BETTER_AUTH_URL": "https://pustak.prashamhtrivedi.app"
   },
   "routes": [
     {

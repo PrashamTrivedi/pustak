@@ -1,6 +1,6 @@
 // PostHog: first-party reverse proxy at /e plus fire-and-forget server capture.
-// The project token is public (it ships in the landing snippet). Distinct id is
-// the auth user id; nothing else that could identify a person is sent.
+// POSTHOG_KEY is a Wrangler secret. Distinct id is the auth user id; nothing
+// else that could identify a person is sent.
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { Bindings } from './types'
 
