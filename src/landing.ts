@@ -1,7 +1,8 @@
+import { posthogSnippet } from './analytics'
 import { injectOgIfMissing, socialImageUrl, socialMetaTags } from './meta'
 import { PROOF_PROFILE_SLUG, THEME_BODY_CSS, THEME_FONTS, THEME_ROOT_CSS } from './theme'
 
-export function landingHtml(origin: string): string {
+export function landingHtml(origin: string, posthogKey?: string): string {
   const title = 'Pustak · pages, served from the edge'
   const description =
     'Write a page, keep the URL. Pustak stores standalone HTML, serves it from the edge, and lets an agent write it for you.'
@@ -18,6 +19,7 @@ export function landingHtml(origin: string): string {
 <title>${title}</title>
 ${tags}
 ${THEME_FONTS}
+${posthogKey ? posthogSnippet(posthogKey) : ''}
 <style>
 ${THEME_ROOT_CSS}
 ${THEME_BODY_CSS}
@@ -48,12 +50,12 @@ ${THEME_BODY_CSS}
       <li><b>Serve.</b> Each page is a URL, delivered from the edge.</li>
       <li><b>Write.</b> An agent can inscribe pages for you over MCP.</li>
     </ol>
-    <a class="proof" href="${proof}">
+    <a class="proof" href="${proof}" data-ph="landing_proof_clicked">
       <small>Live proof · a real profile</small>
       <strong>@${PROOF_PROFILE_SLUG}</strong>
     </a>
-    <p class="second">Then, if you want a space of your own, <a href="/_login">sign in or create an account</a>.</p>
-    <p class="second"><a href="/why">Why this</a> · <a href="/learn">Try a prompt</a> · <a href="/install">Install MCP</a></p>
+    <p class="second">Then, if you want a space of your own, <a href="/_login" data-ph="landing_login_clicked">sign in or create an account</a>.</p>
+    <p class="second"><a href="/why" data-ph="landing_why_clicked">Why this</a> · <a href="/learn" data-ph="landing_learn_clicked">Try a prompt</a> · <a href="/install" data-ph="landing_install_clicked">Install MCP</a></p>
   </div>
 </body>
 </html>`

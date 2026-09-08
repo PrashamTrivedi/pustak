@@ -20,6 +20,7 @@
 import OAuthProvider from '@cloudflare/workers-oauth-provider'
 import { Hono } from 'hono'
 import { createMcpHandler } from 'agents/mcp/server'
+import { withAnalytics } from './analytics'
 import { registerAuthRoutes } from './auth'
 import { registerPageRoutes } from './pages'
 import { createPustakMcpServer } from './mcp'
@@ -47,8 +48,12 @@ export default new OAuthProvider<Bindings>({
   // that one is the direct-invocation overload `(request, requestOptions)`, so
   // OAuthProvider handing it `env` as the second argument would drop `ctx.props`
   // and every tool would see an unauthenticated caller.
-  apiHandler: { fetch: (request, env, ctx) => mcpHandler(request, env, ctx) },
-  defaultHandler: app,
+  apiHandler: {
+    fetch: (request, env, ctx) => withAnalytics(env, ctx, () => mcpHandler(request, env, ctx)),
+  },
+  defaultHandler: {
+    fetch: (request, env, ctx) => withAnalytics(env, ctx, () => app.fetch(request, env, ctx)),
+  },
   authorizeEndpoint: '/authorize',
   tokenEndpoint: '/token',
   clientRegistrationEndpoint: '/register',

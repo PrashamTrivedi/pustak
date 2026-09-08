@@ -2,7 +2,7 @@
   // Cursor Cloud Agent environment (https://cursor.com/docs/cloud-agent/setup)
   // Runtime: npm via ghcr.io/prashamtrivedi/cursor-dev-setup:v1.0.0 (skills/commands baked in).
   // Secrets cannot live in this file — add names below in the Cursor dashboard Secrets tab.
-  // BETTER_AUTH_SECRET, BETTER_AUTH_URL, OTP_DEV_ECHO, EMAIL_API_KEY
+  // BETTER_AUTH_SECRET, BETTER_AUTH_URL, OTP_DEV_ECHO, EMAIL_API_KEY, POSTHOG_KEY
   "name": "pustak",
   "build": {
     "dockerfile": "Dockerfile",
