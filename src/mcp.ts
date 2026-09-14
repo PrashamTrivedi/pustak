@@ -20,6 +20,7 @@ import { toKey } from './pages'
 import { EXPLAINER_PROMPT_TEXT } from './explainer'
 import { learnPromptText, PRODUCTION_ORIGIN } from './prompts'
 import { isVisibility, readVisibility, rewriteVisibility, visibilityForWrite, type Visibility } from './visibility'
+import { mcpToolStatus, track } from './analytics'
 
 const DEFAULT_CONTENT_TYPE = 'text/html; charset=utf-8'
 
@@ -75,6 +76,20 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
   const noSlug = () => errorResult('No username on this account — sign in again.')
   const origin = () => String(env.BETTER_AUTH_URL || PRODUCTION_ORIGIN).replace(/\/+$/, '')
 
+  function tracked<A extends unknown[], R>(name: string, fn: (...args: A) => Promise<R>) {
+    return async (...args: A): Promise<R> => {
+      try {
+        const result = await fn(...args)
+        const status = mcpToolStatus(result)
+        track('mcp_tool', props()?.userId, { tool: name, status, ok: status === 'ok' })
+        return result
+      } catch (err) {
+        track('mcp_tool', props()?.userId, { tool: name, status: 'error', ok: false })
+        throw err
+      }
+    }
+  }
+
   /**
    * Ask the user to confirm a destructive write.
    *
@@ -127,7 +142,7 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
       description: 'Return the authenticated Pustak account and its page space.',
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async () => textResult(`You are ${email()} (@${username()}). Your pages live under /${username()}/.`),
+    tracked('whoami', async () => textResult(`You are ${email()} (@${username()}). Your pages live under /${username()}/.`)),
   )
 
   server.registerTool(
@@ -140,11 +155,11 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ prefix }) => {
+    tracked('list_pages', async ({ prefix }) => {
       if (!hasSlug()) return noSlug()
       const pages = await listPages(username() + '/', prefix ?? '')
       return textResult(JSON.stringify({ count: pages.length, username: username(), pages }, null, 2))
-    },
+    }),
   )
 
   server.registerTool(
@@ -155,13 +170,13 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
       inputSchema: z.object({ path: z.string().describe('Slug-relative path, e.g. "explainers/intro".') }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ path }) => {
+    tracked('read_page', async ({ path }) => {
       if (!hasSlug()) return noSlug()
       const key = keyFor(username(), path)
       const obj = await env.BUCKET.get(key)
       if (!obj) return errorResult(`Not found: /${key}`)
       return textResult(await obj.text())
-    },
+    }),
   )
 
   server.registerTool(
@@ -189,7 +204,7 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
       // page, so it is flagged destructive and non-idempotent.
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
-    async ({ path, content, contentType, visibility, confirm: confirmArg }, c) => {
+    tracked('write_page', async ({ path, content, contentType, visibility, confirm: confirmArg }, c) => {
       if (!hasSlug()) return noSlug()
       const key = keyFor(username(), path)
 
@@ -211,7 +226,7 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
         customMetadata: { owner: email(), visibility: vis },
       })
       return textResult(`${existing ? 'Replaced' : 'Saved'} /${key} (${content.length} bytes, ${vis}).`)
-    },
+    }),
   )
 
   server.registerTool(
@@ -225,7 +240,7 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
-    async ({ path, confirm: confirmArg }, c) => {
+    tracked('delete_page', async ({ path, confirm: confirmArg }, c) => {
       if (!hasSlug()) return noSlug()
       const key = keyFor(username(), path)
       const existing = await env.BUCKET.head(key)
@@ -241,7 +256,7 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
 
       await env.BUCKET.delete(key)
       return textResult(`Deleted /${key}.`)
-    },
+    }),
   )
 
   server.registerTool(
@@ -257,14 +272,14 @@ export function createPustakMcpServer(ctx: McpRequestContext): McpServer {
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ path, visibility }) => {
+    tracked('set_visibility', async ({ path, visibility }) => {
       if (!hasSlug()) return noSlug()
       if (!isVisibility(visibility)) return errorResult('Invalid visibility.')
       const key = keyFor(username(), path)
       const result = await rewriteVisibility(env.BUCKET, key, visibility)
       if (result === 'missing') return errorResult(`Not found: /${key}`)
       return textResult(`Set /${key} to ${visibility}.`)
-    },
+    }),
   )
 
   // --- Resources ---------------------------------------------------------------

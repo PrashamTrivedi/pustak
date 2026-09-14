@@ -237,6 +237,7 @@ npx wrangler d1 migrations apply pustak-auth --remote
 # Secrets
 npx wrangler secret put BETTER_AUTH_SECRET   # openssl rand -base64 32
 npx wrangler secret put EMAIL_API_KEY        # cfEmailSender x-api-key for OTP email
+npx wrangler secret put POSTHOG_KEY          # PostHog project token
 
 # Deploy (binds the custom domain pustak.prashamhtrivedi.app)
 npm run deploy

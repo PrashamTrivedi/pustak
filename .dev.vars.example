@@ -19,3 +19,7 @@ OTP_DEV_ECHO=1
 # service binding. Required in production (unless OTP_DEV_ECHO is set).
 #   wrangler secret put EMAIL_API_KEY
 # EMAIL_API_KEY=cfes_xxxxxxxx
+
+# PostHog project token. Landing + server capture no-op when unset.
+#   wrangler secret put POSTHOG_KEY
+# POSTHOG_KEY=phc_xxxxxxxx

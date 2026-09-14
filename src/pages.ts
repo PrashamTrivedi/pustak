@@ -24,6 +24,7 @@ import { OG_PNG } from './og-png'
 import type { Bindings } from './types'
 import { SITE_PAGE_SLUGS, sitePageHtml } from './site-pages'
 import { canonicalOrigin, PROMPT_MD_SLUGS, promptMarkdown } from './prompts'
+import { handlePosthogProxy, POSTHOG_PROXY_PREFIX, track, type CaptureEvent } from './analytics'
 
 type AppCtx = Context<{ Bindings: Bindings }>
 
@@ -76,6 +77,9 @@ function visibilityFromRequest(c: AppCtx): Visibility | undefined | { error: Res
 }
 
 export function registerPageRoutes(app: Hono<{ Bindings: Bindings }>) {
+  app.all(POSTHOG_PROXY_PREFIX, (c) => handlePosthogProxy(c.req.raw, c.executionCtx))
+  app.all(POSTHOG_PROXY_PREFIX + '/*', (c) => handlePosthogProxy(c.req.raw, c.executionCtx))
+
   app.get('/robots.txt', (c) => {
     const body = [
       'User-agent: *',
@@ -92,6 +96,7 @@ export function registerPageRoutes(app: Hono<{ Bindings: Bindings }>) {
       'Disallow: /register',
       'Disallow: /api',
       'Disallow: /mcp',
+      'Disallow: /e',
       '',
       '# Public profiles are at /<username>. Unlisted and private pages send X-Robots-Tag: noindex, nofollow.',
       '# There is no sitemap; public pages and profiles are the indexable surface.',
@@ -135,29 +140,32 @@ export function registerPageRoutes(app: Hono<{ Bindings: Bindings }>) {
       }
       cursor = listing.truncated ? listing.cursor : undefined
     } while (cursor)
-    return c.json({ count: keys.length, username: session.username, pages: keys })
+    return apiJson(c, 'api_list', session, { count: keys.length, username: session.username, pages: keys }, 200)
   })
 
   // PUT|POST /<slug>/<path> — store a page under your own slug.
   const upload = async (c: AppCtx) => {
     const session = await requireSlug(c)
     if ('response' in session) return session.response
-    if (isReserved(c.req.path)) return c.json({ error: 'Reserved path', path: c.req.path }, 403)
+    if (isReserved(c.req.path)) return apiJson(c, 'api_write', session, { error: 'Reserved path', path: c.req.path }, 403)
     const key = toKey(c.req.path)
     if (firstSegment(key) !== session.username) {
-      return c.json({ error: 'Forbidden: write under your own username, e.g. /' + session.username + '/<path>' }, 403)
+      return apiJson(c, 'api_write', session, { error: 'Forbidden: write under your own username, e.g. /' + session.username + '/<path>' }, 403)
     }
     const stated = visibilityFromRequest(c)
-    if (stated && typeof stated !== 'string') return stated.error
+    if (stated && typeof stated !== 'string') {
+      track('api_write', session.userId, { ok: false, status: 400, method: c.req.method })
+      return stated.error
+    }
     const body = await c.req.arrayBuffer()
-    if (body.byteLength === 0) return c.json({ error: 'Empty body. Send the page content as the request body.' }, 400)
+    if (body.byteLength === 0) return apiJson(c, 'api_write', session, { error: 'Empty body. Send the page content as the request body.' }, 400)
     const vis = await visibilityForWrite(c.env.BUCKET, key, stated)
     const contentType = c.req.header('content-type') || DEFAULT_CONTENT_TYPE
     await c.env.BUCKET.put(key, body, {
       httpMetadata: { contentType },
       customMetadata: { owner: session.email, visibility: vis },
     })
-    return c.json({ ok: true, key, size: body.byteLength, contentType, visibility: vis }, 201)
+    return apiJson(c, 'api_write', session, { ok: true, key, size: body.byteLength, contentType, visibility: vis }, 201)
   }
   app.put('/*', upload)
   app.post('/*', upload)
@@ -165,36 +173,36 @@ export function registerPageRoutes(app: Hono<{ Bindings: Bindings }>) {
   app.patch('/*', async (c) => {
     const session = await requireSlug(c)
     if ('response' in session) return session.response
-    if (isReserved(c.req.path)) return c.json({ error: 'Reserved path', path: c.req.path }, 403)
+    if (isReserved(c.req.path)) return apiJson(c, 'api_visibility', session, { error: 'Reserved path', path: c.req.path }, 403)
     const key = toKey(c.req.path)
     if (firstSegment(key) !== session.username) {
-      return c.json({ error: 'Forbidden: you can only change your own pages' }, 403)
+      return apiJson(c, 'api_visibility', session, { error: 'Forbidden: you can only change your own pages' }, 403)
     }
     let body: unknown
     try {
       body = await c.req.json()
     } catch {
-      return c.json({ error: 'Expected JSON body {"visibility":"public"|"unlisted"|"private"}' }, 400)
+      return apiJson(c, 'api_visibility', session, { error: 'Expected JSON body {"visibility":"public"|"unlisted"|"private"}' }, 400)
     }
     const vis = (body as { visibility?: unknown }).visibility
-    if (!isVisibility(vis)) return c.json({ error: 'Invalid visibility', visibility: vis }, 400)
+    if (!isVisibility(vis)) return apiJson(c, 'api_visibility', session, { error: 'Invalid visibility', visibility: vis }, 400)
     const result = await rewriteVisibility(c.env.BUCKET, key, vis)
-    if (result === 'missing') return c.json({ error: 'Not found' }, 404)
-    return c.json({ ok: true, key, visibility: vis })
+    if (result === 'missing') return apiJson(c, 'api_visibility', session, { error: 'Not found' }, 404)
+    return apiJson(c, 'api_visibility', session, { ok: true, key, visibility: vis }, 200)
   })
 
   app.delete('/*', async (c) => {
     const session = await requireSlug(c)
     if ('response' in session) return session.response
-    if (isReserved(c.req.path)) return c.json({ error: 'Reserved path', path: c.req.path }, 403)
+    if (isReserved(c.req.path)) return apiJson(c, 'api_delete', session, { error: 'Reserved path', path: c.req.path }, 403)
     const key = toKey(c.req.path)
     if (firstSegment(key) !== session.username) {
-      return c.json({ error: 'Forbidden: you can only delete your own pages' }, 403)
+      return apiJson(c, 'api_delete', session, { error: 'Forbidden: you can only delete your own pages' }, 403)
     }
     const existing = await c.env.BUCKET.head(key)
-    if (!existing) return c.json({ error: 'Not found', key }, 404)
+    if (!existing) return apiJson(c, 'api_delete', session, { error: 'Not found', key }, 404)
     await c.env.BUCKET.delete(key)
-    return c.json({ ok: true, key, deleted: true })
+    return apiJson(c, 'api_delete', session, { ok: true, key, deleted: true }, 200)
   })
 
   // Built-in pages.
@@ -232,6 +240,17 @@ export function registerPageRoutes(app: Hono<{ Bindings: Bindings }>) {
 
 type SlugSession = { userId: string; email: string; username: string }
 
+function apiJson(
+  c: AppCtx,
+  event: CaptureEvent,
+  session: SlugSession,
+  body: unknown,
+  status: 200 | 201 | 400 | 403 | 404,
+) {
+  track(event, session.userId, { ok: status < 400, status, method: c.req.method })
+  return c.json(body, status)
+}
+
 /** Require a session AND a chosen username, or return a redirect/JSON response. */
 async function requireSlug(c: AppCtx): Promise<SlugSession | { response: Response }> {
   const user = await getSessionUser(c.env, c.req.raw)
@@ -244,7 +263,7 @@ async function requireSlug(c: AppCtx): Promise<SlugSession | { response: Respons
 async function home(c: AppCtx): Promise<Response> {
   const user = await getSessionUser(c.env, c.req.raw)
   c.header('Vary', 'Cookie')
-  if (!user) return c.html(landingHtml(new URL(c.req.url).origin))
+  if (!user) return c.html(landingHtml(new URL(c.req.url).origin, c.env.POSTHOG_KEY))
   const username = await getUsername(c.env, user.id)
   if (!username) return c.redirect('/_choose-username')
   c.header('Cache-Control', 'private, no-store')
