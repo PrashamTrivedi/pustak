@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Store and serve standalone HTML pages from R2 via a Cloudflare Worker",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
